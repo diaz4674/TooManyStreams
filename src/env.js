@@ -14,6 +14,10 @@ function normalizePathname(pathname) {
 	return pathname.startsWith("/") ? pathname : `/${pathname}`
 }
 
+function normalizeHostname(hostname) {
+	return String(hostname ?? "").trim().toLowerCase()
+}
+
 function buildHttpsUrl(host, pathname) {
 	const normalizedHost = normalizeHost(host)
 	if (!normalizedHost) {
@@ -33,6 +37,32 @@ export function getCurrentAppPathname() {
 	}
 
 	return normalizePathname(window.location.pathname)
+}
+
+export function getCurrentAppUrl(pathname = getCurrentAppPathname()) {
+	if (typeof window === "undefined") {
+		return ""
+	}
+
+	const origin =
+		typeof window.location.origin === "string"
+			? window.location.origin.trim()
+			: ""
+	if (!origin || origin === "null") {
+		return ""
+	}
+
+	return `${origin}${normalizePathname(pathname)}`
+}
+
+export function isLocalHostname(hostname) {
+	const normalizedHostname = normalizeHostname(hostname)
+	return (
+		normalizedHostname === "localhost" ||
+		normalizedHostname === "127.0.0.1" ||
+		normalizedHostname === "::1" ||
+		normalizedHostname === "[::1]"
+	)
 }
 
 export function getVercelAppUrl(pathname = getCurrentAppPathname()) {

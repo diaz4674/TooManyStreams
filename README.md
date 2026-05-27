@@ -26,6 +26,9 @@ secret.
    registered app's client ID.
 3. Set `VITE_TWITCH_REDIRECT_URI` to the exact registered redirect URL when
    using a different hostname or deployment URL.
+4. Do not leave `VITE_TWITCH_REDIRECT_URI` pointed at `http://localhost:4173/`
+   in production. If you omit it, the app now falls back to the current site
+   URL automatically.
 
 ## Vercel Env Setup
 
@@ -35,9 +38,9 @@ The app reads Twitch config from client-safe Vite env vars:
 - `VITE_TWITCH_REDIRECT_URI` (optional)
 
 For Vercel deployments, add `VITE_TWITCH_CLIENT_ID` in Project Settings for the
-environments you use. If you leave `VITE_TWITCH_REDIRECT_URI` unset, the app now
-falls back to Vercel's Vite-prefixed system env vars and builds a redirect URL
-from them:
+environments you use. If you leave `VITE_TWITCH_REDIRECT_URI` unset, the app
+first uses the current browser URL. The build also mirrors Vercel's system env
+vars into Vite-friendly names for fallback cases:
 
 - `VITE_VERCEL_PROJECT_PRODUCTION_URL` for Production
 - `VITE_VERCEL_BRANCH_URL`, then `VITE_VERCEL_URL`, for Preview

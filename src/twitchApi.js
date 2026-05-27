@@ -1,7 +1,9 @@
 import {
+	getCurrentAppUrl,
 	getCurrentAppPathname,
 	getPublicEnv,
 	getVercelAppUrl,
+	isLocalHostname,
 } from "./env"
 
 const TWITCH_SESSION_STORAGE_KEY = "multiwatch.twitch.session"
@@ -21,16 +23,49 @@ export function getTwitchClientId() {
 	return getPublicEnv("VITE_TWITCH_CLIENT_ID")
 }
 
+function shouldIgnoreConfiguredRedirectUri(redirectUri) {
+	if (typeof window === "undefined") {
+		return false
+	}
+
+	try {
+		const configuredUrl = new URL(redirectUri)
+		return (
+			!isLocalHostname(window.location.hostname) &&
+			isLocalHostname(configuredUrl.hostname)
+		)
+	} catch {
+		return false
+	}
+}
+
 export function getTwitchRedirectUri() {
 	const configuredRedirectUri = getPublicEnv("VITE_TWITCH_REDIRECT_URI")
-	if (configuredRedirectUri) {
+	if (
+		configuredRedirectUri &&
+		!shouldIgnoreConfiguredRedirectUri(configuredRedirectUri)
+	) {
 		return configuredRedirectUri
 	}
 
 	const pathname = getCurrentAppPathname()
-	return (
-		getVercelAppUrl(pathname) || `${window.location.origin}${pathname}`
-	)
+	return getCurrentAppUrl(pathname) || getVercelAppUrl(pathname)
+}
+
+function getTwitchAuthorizationErrorMessage(error, description = "") {
+	if (error === "redirect_mismatch") {
+		return "Twitch rejected the callback URL. Register this site's exact redirect URL in your Twitch app settings."
+	}
+
+	if (error === "access_denied" || error === "denied") {
+		return "Twitch connection was cancelled or denied."
+	}
+
+	if (description) {
+		return description
+	}
+
+	return "Twitch connection could not be completed. Please try again."
 }
 
 function normalizeStoredScopes(value) {
@@ -138,33 +173,44 @@ export function beginTwitchAuthorization() {
 
 export function consumeTwitchOAuthCallback() {
 	const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""))
+	const query = new URLSearchParams(window.location.search)
 	const accessToken = fragment.get("access_token")
-	const error = fragment.get("error")
+	const error = fragment.get("error") || query.get("error")
 
 	if (!accessToken && !error) {
 		return { handled: false }
 	}
 
 	const expectedState = window.sessionStorage.getItem(TWITCH_OAUTH_STATE_KEY)
-	const returnedState = fragment.get("state")
 	window.sessionStorage.removeItem(TWITCH_OAUTH_STATE_KEY)
+	const sanitizedUrl = new URL(window.location.href)
+	sanitizedUrl.hash = ""
+	sanitizedUrl.searchParams.delete("error")
+	sanitizedUrl.searchParams.delete("error_description")
+	sanitizedUrl.searchParams.delete("state")
 	window.history.replaceState(
 		null,
 		document.title,
-		`${window.location.pathname}${window.location.search}`,
+		`${sanitizedUrl.pathname}${sanitizedUrl.search}${sanitizedUrl.hash}`,
 	)
-
-	if (!expectedState || !returnedState || returnedState !== expectedState) {
-		return {
-			handled: true,
-			error: "Twitch connection could not be verified. Please connect again.",
-		}
-	}
 
 	if (error) {
 		return {
 			handled: true,
-			error: "Twitch connection was cancelled or denied.",
+			error: getTwitchAuthorizationErrorMessage(
+				error,
+				fragment.get("error_description") ||
+					query.get("error_description") ||
+					"",
+			),
+		}
+	}
+
+	const returnedState = fragment.get("state")
+	if (!expectedState || !returnedState || returnedState !== expectedState) {
+		return {
+			handled: true,
+			error: "Twitch connection could not be verified. Please connect again.",
 		}
 	}
 
