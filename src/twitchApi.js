@@ -1,3 +1,9 @@
+import {
+	getCurrentAppPathname,
+	getPublicEnv,
+	getVercelAppUrl,
+} from "./env"
+
 const TWITCH_SESSION_STORAGE_KEY = "multiwatch.twitch.session"
 const TWITCH_OAUTH_STATE_KEY = "multiwatch.twitch.oauthState"
 const TWITCH_AUTHORIZE_URL = "https://id.twitch.tv/oauth2/authorize"
@@ -12,18 +18,19 @@ export class TwitchAuthorizationError extends Error {
 }
 
 export function getTwitchClientId() {
-	return String(import.meta.env.VITE_TWITCH_CLIENT_ID ?? "").trim()
+	return getPublicEnv("VITE_TWITCH_CLIENT_ID")
 }
 
 export function getTwitchRedirectUri() {
-	const configuredRedirectUri = String(
-		import.meta.env.VITE_TWITCH_REDIRECT_URI ?? "",
-	).trim()
+	const configuredRedirectUri = getPublicEnv("VITE_TWITCH_REDIRECT_URI")
 	if (configuredRedirectUri) {
 		return configuredRedirectUri
 	}
 
-	return `${window.location.origin}${window.location.pathname}`
+	const pathname = getCurrentAppPathname()
+	return (
+		getVercelAppUrl(pathname) || `${window.location.origin}${pathname}`
+	)
 }
 
 function normalizeStoredScopes(value) {

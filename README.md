@@ -27,6 +27,33 @@ secret.
 3. Set `VITE_TWITCH_REDIRECT_URI` to the exact registered redirect URL when
    using a different hostname or deployment URL.
 
+## Vercel Env Setup
+
+The app reads Twitch config from client-safe Vite env vars:
+
+- `VITE_TWITCH_CLIENT_ID`
+- `VITE_TWITCH_REDIRECT_URI` (optional)
+
+For Vercel deployments, add `VITE_TWITCH_CLIENT_ID` in Project Settings for the
+environments you use. If you leave `VITE_TWITCH_REDIRECT_URI` unset, the app now
+falls back to Vercel's Vite-prefixed system env vars and builds a redirect URL
+from them:
+
+- `VITE_VERCEL_PROJECT_PRODUCTION_URL` for Production
+- `VITE_VERCEL_BRANCH_URL`, then `VITE_VERCEL_URL`, for Preview
+
+This requires Vercel's "Automatically expose System Environment Variables"
+setting to be enabled.
+
+Register the exact Twitch redirect URLs you plan to use:
+
+- Local: `http://localhost:4173/`
+- Production: `https://your-domain.com/`
+- Preview: your stable branch URL if you want Twitch auth to work on previews
+
+If you prefer, you can still set `VITE_TWITCH_REDIRECT_URI` explicitly in Vercel
+for both Preview and Production instead of relying on the fallback behavior.
+
 The Twitch connection token is saved in browser local storage until it expires
 or the user selects Disconnect.
 
