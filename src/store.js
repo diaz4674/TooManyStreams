@@ -112,7 +112,7 @@ function buildStateFromStreams(streams, options = {}) {
 }
 
 function getFallbackState() {
-	return buildStateFromStreams(sampleStreams, {
+	return buildStateFromStreams([], {
 		projectName: DEFAULT_PROJECT_NAME,
 	})
 }
@@ -121,7 +121,7 @@ function loadLegacyState(parsed) {
 	const streams =
 		Array.isArray(parsed.streams) && parsed.streams.length > 0
 			? parsed.streams.filter(isValidStream)
-			: sampleStreams
+			: []
 
 	return buildStateFromStreams(streams, {
 		projectName: DEFAULT_PROJECT_NAME,

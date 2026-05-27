@@ -930,15 +930,15 @@ export default function App() {
 					<div className="pointer-events-none absolute inset-x-12 top-0 h-52 rounded-[50%] bg-cyan-400/10 blur-3xl" />
 					<div className="relative z-10 mx-auto max-w-3xl text-center">
 						<p className="m-0 text-sm font-bold uppercase tracking-[0.14em] text-violet-300">
-							Empty Project
+							No Streams Yet
 						</p>
 						<h2 className="mt-2 mb-3 text-[clamp(2rem,4vw,3rem)] leading-none">
-							{activeProject.name} is ready for a TooManyStreams wall.
+							{activeProject.name} is empty. Build your wall from scratch.
 						</h2>
 						<p className="mx-auto mb-6 max-w-2xl text-slate-300/80">
-							Add Twitch or YouTube streams, keep them mounted while you
-							reorder the wall, and open a dedicated Twitch chat lane whenever
-							you need it.
+							Start by adding a Twitch or YouTube stream. Once you have a few
+							in place, you can reorder the wall and open Twitch chat alongside
+							the stream grid.
 						</p>
 
 						<div className="flex flex-wrap justify-center gap-3">
@@ -949,13 +949,6 @@ export default function App() {
 							>
 								<i className="fa-solid fa-plus" />
 								Add Stream
-							</button>
-							<button
-								type="button"
-								onClick={loadSamples}
-								className="rounded-2xl border-0 bg-white/8 px-5 py-3.5 font-bold text-white transition-all duration-300 cursor-pointer hover:-translate-y-px hover:bg-white/12"
-							>
-								Add Sample Streams
 							</button>
 						</div>
 					</div>
