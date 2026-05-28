@@ -61,13 +61,15 @@ function getGridRowSpan(heightPx, rowUnitPx, gapPx) {
 
 function WallLoaderOverlay({ loadingCount }) {
 	return (
-		<div className="absolute inset-0 z-[85] flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_32%),linear-gradient(180deg,rgba(2,6,23,0.92),rgba(8,15,35,0.9))] px-4 backdrop-blur-sm">
-			<div className="wall-loader-shell w-full max-w-[32rem] rounded-[2rem] border border-white/10 bg-slate-950/36 p-4 shadow-[0_30px_90px_rgba(2,6,23,0.58)]">
-				<img
-					src={loaderSrc}
-					alt="Coots loading the wall"
-					className="wall-loader-image block h-auto w-full"
-				/>
+		<div className="absolute inset-0 z-[85] flex items-start justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_32%),linear-gradient(180deg,rgba(2,6,23,0.92),rgba(8,15,35,0.9))] px-4 pt-8 pb-4 backdrop-blur-sm sm:pt-10 lg:pt-12">
+			<div className="wall-loader-shell w-full max-w-[32rem] overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/36 p-4 pt-3 shadow-[0_30px_90px_rgba(2,6,23,0.58)]">
+				<div className="wall-loader-stage">
+					<img
+						src={loaderSrc}
+						alt="Coots loading the wall"
+						className="wall-loader-image block h-auto w-full"
+					/>
+				</div>
 				<p className="mt-3 mb-0 text-center text-[0.72rem] font-bold uppercase tracking-[0.2em] text-cyan-100/76">
 					Loading {loadingCount} stream{loadingCount === 1 ? "" : "s"}
 				</p>
