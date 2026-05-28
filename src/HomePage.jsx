@@ -8,6 +8,7 @@ import ProjectsDialog from "./components/ProjectsDialog"
 import StreamChatSidebar from "./components/StreamChatSidebar"
 import HomepageSeoSections from "./components/HomepageSeoSections"
 import PageMeta from "./components/PageMeta"
+import { isStreamChatCapable } from "./utils"
 import {
 	loadPersistedState,
 	MAX_COLUMN_OPTIONS,
@@ -52,16 +53,18 @@ function sanitizeProject(project, streamsById) {
 	const streamIds = [
 		...new Set(project.streamIds.filter((streamId) => streamId in streamsById)),
 	]
-	const twitchStreamIds = streamIds.filter(
-		(streamId) => streamsById[streamId]?.platform === "twitch",
+	const chatCapableStreamIds = streamIds.filter((streamId) =>
+		isStreamChatCapable(streamsById[streamId]),
 	)
 
 	return {
 		...project,
 		streamIds,
-		activeChatStreamId: twitchStreamIds.includes(project.activeChatStreamId)
+		activeChatStreamId: chatCapableStreamIds.includes(
+			project.activeChatStreamId,
+		)
 			? project.activeChatStreamId
-			: (twitchStreamIds[0] ?? null),
+			: (chatCapableStreamIds[0] ?? null),
 		layoutMode: project.layoutMode === "matrix" ? "matrix" : "auto",
 	}
 }
@@ -470,6 +473,10 @@ export default function HomePage() {
 		() => streams.filter((stream) => stream.platform === "twitch"),
 		[streams],
 	)
+	const chatCapableStreams = useMemo(
+		() => streams.filter((stream) => isStreamChatCapable(stream)),
+		[streams],
+	)
 	const savedTwitchStreams = useMemo(
 		() =>
 			Object.values(viewerState.streamsById).filter(
@@ -580,14 +587,14 @@ export default function HomePage() {
 		useWallStore.getState().syncProjectState({
 			projectId: activeProject.id,
 			orderedStreamIds: streamIds,
-			twitchStreamIds: twitchStreams.map((stream) => stream.id),
+			chatCapableStreamIds: chatCapableStreams.map((stream) => stream.id),
 			activeChatStreamId: activeProject.activeChatStreamId,
 		})
 	}, [
 		activeProject.activeChatStreamId,
 		activeProject.id,
+		chatCapableStreams,
 		streamIds,
-		twitchStreams,
 	])
 
 	const createProject = useCallback((name) => {
@@ -786,7 +793,7 @@ export default function HomePage() {
 						projectCount={viewerState.projects.length}
 						activeProjectName={activeProject.name}
 						streamCount={streams.length}
-						twitchStreamCount={twitchStreams.length}
+						chatCapableStreamCount={chatCapableStreams.length}
 						twitchSession={twitchSession}
 						savedTwitchStreams={savedTwitchStreams}
 						activeStreamIds={activeProject.streamIds}
@@ -813,10 +820,10 @@ export default function HomePage() {
 							maxColumns={viewerState.maxColumns}
 						/>
 
-						{chatOpen && twitchStreams.length > 0 && (
+						{chatOpen && chatCapableStreams.length > 0 && (
 							<div className="hidden h-full w-[22rem] shrink-0 xl:block">
 								<StreamChatSidebar
-									streams={twitchStreams}
+									streams={chatCapableStreams}
 									activeStreamId={activeChatStreamId}
 									onSelectStream={handleActiveChatStreamChange}
 									variant="matrixDock"
@@ -836,7 +843,7 @@ export default function HomePage() {
 							<button
 								type="button"
 								onClick={handleToggleChat}
-								disabled={twitchStreams.length === 0}
+								disabled={chatCapableStreams.length === 0}
 								className={`rounded-full border-0 px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
 									chatOpen
 										? "bg-cyan-400/20 text-cyan-50"
@@ -875,7 +882,7 @@ export default function HomePage() {
 							</div>
 						</div>
 
-						{chatOpen && twitchStreams.length > 0 && (
+						{chatOpen && chatCapableStreams.length > 0 && (
 							<div className="fixed inset-0 z-40 xl:hidden">
 								<button
 									type="button"
@@ -885,7 +892,7 @@ export default function HomePage() {
 								/>
 								<div className="absolute inset-y-0 right-0 w-[min(24rem,calc(100vw-2rem))]">
 									<StreamChatSidebar
-										streams={twitchStreams}
+										streams={chatCapableStreams}
 										activeStreamId={activeChatStreamId}
 										onSelectStream={handleActiveChatStreamChange}
 										variant="matrixDrawer"
@@ -923,9 +930,9 @@ export default function HomePage() {
 							onClearFocus={handleClearFocus}
 						/>
 
-						{chatOpen && twitchStreams.length > 0 && (
+						{chatOpen && chatCapableStreams.length > 0 && (
 							<StreamChatSidebar
-								streams={twitchStreams}
+								streams={chatCapableStreams}
 								activeStreamId={activeChatStreamId}
 								onSelectStream={handleActiveChatStreamChange}
 							/>
@@ -943,7 +950,7 @@ export default function HomePage() {
 							</h2>
 							<p className="mx-auto mb-6 max-w-2xl text-slate-300/80">
 								Start by adding a Twitch or YouTube stream. Once you have a few
-								in place, you can reorder the wall and open Twitch chat alongside
+								in place, you can reorder the wall and open stream chat alongside
 								the stream grid.
 							</p>
 

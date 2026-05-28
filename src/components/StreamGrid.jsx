@@ -16,7 +16,7 @@ import loaderSrc from "../../assets/loader.png"
 import StreamCard from "./StreamCard"
 import StreamPlayer from "./StreamPlayer"
 import StreamChatSidebar from "./StreamChatSidebar"
-import { getWallLayout } from "../utils"
+import { getWallLayout, isStreamChatCapable } from "../utils"
 import { AUTO_WALL_GAP_PX, STREAM_CARD_CHROME_PX } from "../layoutUtils"
 import { useWallStore } from "../wallStore"
 
@@ -343,7 +343,7 @@ function FocusOverlayChrome({
 	focusLayout,
 	focusChatOpen,
 	focusChatStreamId,
-	focusedTwitchStreams,
+	focusedChatStreams,
 	emptySlotStyles,
 	availableCompanionStreams,
 	viewportWidth,
@@ -565,7 +565,7 @@ function FocusOverlayChrome({
 						</div>
 					)}
 
-					{focusedTwitchStreams.length > 0 && (
+					{focusedChatStreams.length > 0 && (
 						<button
 							type="button"
 							onClick={onToggleFocusChat}
@@ -606,7 +606,7 @@ function FocusOverlayChrome({
 					/>
 				))}
 
-			{focusChatOpen && focusedTwitchStreams.length > 0 && (
+			{focusChatOpen && focusedChatStreams.length > 0 && (
 				<div
 					className="pointer-events-none fixed z-[85]"
 					style={{
@@ -715,9 +715,9 @@ function FocusOverlayChrome({
 									Focused Chat
 								</div>
 								<div className="mt-1 text-sm font-semibold text-white">
-									{focusedTwitchStreams.find(
+									{focusedChatStreams.find(
 										(stream) => stream.id === focusChatStreamId,
-									)?.title ?? focusedTwitchStreams[0]?.title}
+									)?.title ?? focusedChatStreams[0]?.title}
 								</div>
 							</div>
 							<div className="flex items-center gap-2">
@@ -735,7 +735,7 @@ function FocusOverlayChrome({
 
 						<div className="min-h-0 flex-1 p-3 pt-0">
 							<StreamChatSidebar
-								streams={focusedTwitchStreams}
+								streams={focusedChatStreams}
 								activeStreamId={focusChatStreamId}
 								onSelectStream={onSetFocusChatStream}
 								variant="overlay"
@@ -1375,11 +1375,11 @@ export default function StreamGrid({
 		() => focusSlotStyles.slice(visibleFocusedStreamIds.length),
 		[focusSlotStyles, visibleFocusedStreamIds.length],
 	)
-	const focusedTwitchStreams = useMemo(
+	const focusedChatStreams = useMemo(
 		() =>
 			streams.filter(
 				(stream) =>
-					focusedStreamIdSet.has(stream.id) && stream.platform === "twitch",
+					focusedStreamIdSet.has(stream.id) && isStreamChatCapable(stream),
 			),
 		[focusedStreamIdSet, streams],
 	)
@@ -1400,7 +1400,7 @@ export default function StreamGrid({
 					focusLayout={focusLayout}
 					focusChatOpen={focusChatOpen}
 					focusChatStreamId={focusChatStreamId}
-					focusedTwitchStreams={focusedTwitchStreams}
+					focusedChatStreams={focusedChatStreams}
 					emptySlotStyles={emptySlotStyles}
 					availableCompanionStreams={availableCompanionStreams}
 					viewportWidth={containerSize.viewportWidth}

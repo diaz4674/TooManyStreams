@@ -191,8 +191,8 @@ export default function AddStreamDialog({
 
 					{platform === "youtube" && (
 						<p className="-mt-2 mb-0 text-xs leading-5 text-slate-400">
-							Use a YouTube watch/live URL, an 11-character video ID, or a
-							channel ID starting with UC for live channel embeds.
+							Channel IDs still work for playback. Live chat in this version
+							needs a live YouTube watch/live URL or an 11-character video ID.
 						</p>
 					)}
 

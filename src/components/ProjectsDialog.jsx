@@ -49,7 +49,7 @@ export default function ProjectsDialog({
 								Switch and organize saved stream walls
 							</h2>
 							<p className="m-0 text-sm text-slate-300/75">
-								Each project keeps its own stream order and preferred Twitch
+								Each project keeps its own stream order and preferred saved
 								chat tab.
 							</p>
 						</div>

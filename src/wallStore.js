@@ -51,48 +51,48 @@ function getDefaultFocusState() {
 	}
 }
 
-function getFocusedTwitchStreamIds(focusedStreamIds, twitchStreamIds) {
+function getFocusedChatCapableStreamIds(focusedStreamIds, chatCapableStreamIds) {
 	return focusedStreamIds.filter((streamId) =>
-		twitchStreamIds.includes(streamId),
+		chatCapableStreamIds.includes(streamId),
 	)
 }
 
 function getNextFocusChatStreamId({
 	focusedStreamIds,
-	twitchStreamIds,
+	chatCapableStreamIds,
 	preferredStreamId = null,
 	currentChatStreamId = null,
 }) {
-	const focusedTwitchStreamIds = getFocusedTwitchStreamIds(
+	const focusedChatCapableStreamIds = getFocusedChatCapableStreamIds(
 		focusedStreamIds,
-		twitchStreamIds,
+		chatCapableStreamIds,
 	)
 
-	if (focusedTwitchStreamIds.length === 0) {
+	if (focusedChatCapableStreamIds.length === 0) {
 		return null
 	}
 
 	if (
 		typeof preferredStreamId === "string" &&
-		focusedTwitchStreamIds.includes(preferredStreamId)
+		focusedChatCapableStreamIds.includes(preferredStreamId)
 	) {
 		return preferredStreamId
 	}
 
 	if (
 		typeof currentChatStreamId === "string" &&
-		focusedTwitchStreamIds.includes(currentChatStreamId)
+		focusedChatCapableStreamIds.includes(currentChatStreamId)
 	) {
 		return currentChatStreamId
 	}
 
-	return focusedTwitchStreamIds[0]
+	return focusedChatCapableStreamIds[0]
 }
 
 export const useWallStore = create((set) => ({
 	projectId: "",
 	orderedStreamIds: [],
-	twitchStreamIds: [],
+	chatCapableStreamIds: [],
 	chatOpen: false,
 	activeChatStreamId: null,
 	expandedCardChatStreamId: null,
@@ -101,18 +101,20 @@ export const useWallStore = create((set) => ({
 	syncProjectState({
 		projectId,
 		orderedStreamIds,
-		twitchStreamIds,
+		chatCapableStreamIds,
 		activeChatStreamId,
 	}) {
 		set((state) => {
 			const nextOrderedIds = uniqueIds(orderedStreamIds)
-			const nextTwitchIds = uniqueIds(twitchStreamIds).filter((id) =>
+			const nextChatCapableIds = uniqueIds(chatCapableStreamIds).filter((id) =>
 				nextOrderedIds.includes(id),
 			)
-			const nextActiveChatStreamId = nextTwitchIds.includes(activeChatStreamId)
+			const nextActiveChatStreamId = nextChatCapableIds.includes(
+				activeChatStreamId,
+			)
 				? activeChatStreamId
-				: (nextTwitchIds[0] ?? null)
-			const nextExpandedCardChatStreamId = nextTwitchIds.includes(
+				: (nextChatCapableIds[0] ?? null)
+			const nextExpandedCardChatStreamId = nextChatCapableIds.includes(
 				state.expandedCardChatStreamId,
 			)
 				? state.expandedCardChatStreamId
@@ -127,7 +129,7 @@ export const useWallStore = create((set) => ({
 				? null
 				: getNextFocusChatStreamId({
 						focusedStreamIds: nextFocusedStreamIds,
-						twitchStreamIds: nextTwitchIds,
+						chatCapableStreamIds: nextChatCapableIds,
 						currentChatStreamId: state.focusChatStreamId,
 					})
 			const nextFocusChatOpen = nextFocusChatStreamId
@@ -144,12 +146,13 @@ export const useWallStore = create((set) => ({
 					nextOrderedIds.includes(id),
 				),
 			)
-			const nextChatOpen = nextTwitchIds.length === 0 ? false : state.chatOpen
+			const nextChatOpen =
+				nextChatCapableIds.length === 0 ? false : state.chatOpen
 
 			if (
 				state.projectId === projectId &&
 				arraysEqual(state.orderedStreamIds, nextOrderedIds) &&
-				arraysEqual(state.twitchStreamIds, nextTwitchIds) &&
+				arraysEqual(state.chatCapableStreamIds, nextChatCapableIds) &&
 				state.chatOpen === nextChatOpen &&
 				state.activeChatStreamId === nextActiveChatStreamId &&
 				state.expandedCardChatStreamId === nextExpandedCardChatStreamId &&
@@ -166,7 +169,7 @@ export const useWallStore = create((set) => ({
 				...state,
 				projectId,
 				orderedStreamIds: nextOrderedIds,
-				twitchStreamIds: nextTwitchIds,
+				chatCapableStreamIds: nextChatCapableIds,
 				chatOpen: nextChatOpen,
 				activeChatStreamId: nextActiveChatStreamId,
 				expandedCardChatStreamId: nextExpandedCardChatStreamId,
@@ -180,7 +183,7 @@ export const useWallStore = create((set) => ({
 	},
 	toggleChat() {
 		set((state) =>
-			state.twitchStreamIds.length === 0
+			state.chatCapableStreamIds.length === 0
 				? state
 				: {
 						...state,
@@ -190,7 +193,7 @@ export const useWallStore = create((set) => ({
 	},
 	setActiveChatStream(streamId) {
 		set((state) =>
-			state.twitchStreamIds.includes(streamId)
+			state.chatCapableStreamIds.includes(streamId)
 				? {
 						...state,
 						activeChatStreamId: streamId,
@@ -200,7 +203,7 @@ export const useWallStore = create((set) => ({
 	},
 	toggleCardChat(streamId) {
 		set((state) => {
-			if (!state.twitchStreamIds.includes(streamId)) {
+			if (!state.chatCapableStreamIds.includes(streamId)) {
 				return state
 			}
 
@@ -236,7 +239,7 @@ export const useWallStore = create((set) => ({
 				focusChatOpen: false,
 				focusChatStreamId: getNextFocusChatStreamId({
 					focusedStreamIds: nextFocusedStreamIds,
-					twitchStreamIds: state.twitchStreamIds,
+					chatCapableStreamIds: state.chatCapableStreamIds,
 					preferredStreamId: streamId,
 				}),
 			}
@@ -260,7 +263,7 @@ export const useWallStore = create((set) => ({
 				focusedStreamIds: nextFocusedStreamIds,
 				focusChatStreamId: getNextFocusChatStreamId({
 					focusedStreamIds: nextFocusedStreamIds,
-					twitchStreamIds: state.twitchStreamIds,
+					chatCapableStreamIds: state.chatCapableStreamIds,
 					preferredStreamId: streamId,
 					currentChatStreamId: state.focusChatStreamId,
 				}),
@@ -282,7 +285,7 @@ export const useWallStore = create((set) => ({
 			)
 			const nextFocusChatStreamId = getNextFocusChatStreamId({
 				focusedStreamIds: nextFocusedStreamIds,
-				twitchStreamIds: state.twitchStreamIds,
+				chatCapableStreamIds: state.chatCapableStreamIds,
 				currentChatStreamId: state.focusChatStreamId,
 			})
 
@@ -314,7 +317,7 @@ export const useWallStore = create((set) => ({
 				focusedStreamIds: nextFocusedStreamIds,
 				focusChatStreamId: getNextFocusChatStreamId({
 					focusedStreamIds: nextFocusedStreamIds,
-					twitchStreamIds: state.twitchStreamIds,
+					chatCapableStreamIds: state.chatCapableStreamIds,
 					preferredStreamId: streamId,
 					currentChatStreamId: state.focusChatStreamId,
 				}),
@@ -333,12 +336,12 @@ export const useWallStore = create((set) => ({
 	},
 	toggleFocusChat() {
 		set((state) => {
-			const focusedTwitchStreamIds = getFocusedTwitchStreamIds(
+			const focusedChatCapableStreamIds = getFocusedChatCapableStreamIds(
 				state.focusedStreamIds,
-				state.twitchStreamIds,
+				state.chatCapableStreamIds,
 			)
 
-			if (focusedTwitchStreamIds.length === 0) {
+			if (focusedChatCapableStreamIds.length === 0) {
 				return state
 			}
 
@@ -347,20 +350,20 @@ export const useWallStore = create((set) => ({
 				focusChatOpen: !state.focusChatOpen,
 				focusChatStreamId:
 					state.focusChatStreamId &&
-					focusedTwitchStreamIds.includes(state.focusChatStreamId)
+					focusedChatCapableStreamIds.includes(state.focusChatStreamId)
 						? state.focusChatStreamId
-						: focusedTwitchStreamIds[0],
+						: focusedChatCapableStreamIds[0],
 			}
 		})
 	},
 	setFocusChatStream(streamId) {
 		set((state) => {
-			const focusedTwitchStreamIds = getFocusedTwitchStreamIds(
+			const focusedChatCapableStreamIds = getFocusedChatCapableStreamIds(
 				state.focusedStreamIds,
-				state.twitchStreamIds,
+				state.chatCapableStreamIds,
 			)
 
-			return focusedTwitchStreamIds.includes(streamId)
+			return focusedChatCapableStreamIds.includes(streamId)
 				? {
 						...state,
 						focusChatStreamId: streamId,

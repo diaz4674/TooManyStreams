@@ -1,3 +1,5 @@
+import { isStreamChatCapable } from "./utils"
+
 const STORAGE_KEY = "multiwatch.viewer.state"
 const STORAGE_VERSION = 10
 const DEFAULT_PROJECT_NAME = "Main View"
@@ -69,8 +71,8 @@ function buildProject(
 	const uniqueStreamIds = [
 		...new Set(streamIds.filter((streamId) => typeof streamId === "string")),
 	]
-	const twitchStreamIds = uniqueStreamIds.filter(
-		(streamId) => streamsById[streamId]?.platform === "twitch",
+	const chatCapableStreamIds = uniqueStreamIds.filter((streamId) =>
+		isStreamChatCapable(streamsById[streamId]),
 	)
 	return {
 		id,
@@ -80,9 +82,9 @@ function buildProject(
 				: DEFAULT_PROJECT_NAME,
 		kind: STANDARD_PROJECT_KIND,
 		streamIds: uniqueStreamIds,
-		activeChatStreamId: twitchStreamIds.includes(activeChatStreamId)
+		activeChatStreamId: chatCapableStreamIds.includes(activeChatStreamId)
 			? activeChatStreamId
-			: (twitchStreamIds[0] ?? null),
+			: (chatCapableStreamIds[0] ?? null),
 		layoutMode:
 			layoutMode === "matrix" || layoutMode === "creative" ? "matrix" : "auto",
 	}
@@ -93,13 +95,14 @@ function buildStateFromStreams(streams, options = {}) {
 	const streamsById = Object.fromEntries(
 		validStreams.map((stream) => [stream.id, stream]),
 	)
-	const firstTwitchStreamId =
-		validStreams.find((stream) => stream.platform === "twitch")?.id ?? null
+	const firstChatCapableStreamId =
+		validStreams.find((stream) => isStreamChatCapable(stream))?.id ?? null
 	const project = buildProject(
 		{
 			name: options.projectName ?? DEFAULT_PROJECT_NAME,
 			streamIds: validStreams.map((stream) => stream.id),
-			activeChatStreamId: options.activeChatStreamId ?? firstTwitchStreamId,
+			activeChatStreamId:
+				options.activeChatStreamId ?? firstChatCapableStreamId,
 		},
 		streamsById,
 	)

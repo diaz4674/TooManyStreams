@@ -6,7 +6,7 @@ export default function Header({
 	projectCount,
 	activeProjectName,
 	streamCount,
-	twitchStreamCount,
+	chatCapableStreamCount,
 	twitchSession,
 	savedTwitchStreams,
 	activeStreamIds,
@@ -24,9 +24,9 @@ export default function Header({
 	twitchConnectionMessage,
 }) {
 	const chatSummary =
-		twitchStreamCount === 0
-			? "No Twitch chats in this wall yet"
-			: `${twitchStreamCount} ${twitchStreamCount === 1 ? "Twitch stream" : "Twitch streams"} ready for chat`
+		chatCapableStreamCount === 0
+			? "No supported chats in this wall yet"
+			: `${chatCapableStreamCount} ${chatCapableStreamCount === 1 ? "stream" : "streams"} ready for chat`
 
 	return (
 		<header className="mb-5 grid gap-4">
@@ -121,7 +121,7 @@ export default function Header({
 					<button
 						type="button"
 						onClick={onToggleChat}
-						disabled={twitchStreamCount === 0}
+						disabled={chatCapableStreamCount === 0}
 						className={`rounded-2xl border-0 px-5 py-3.5 font-bold text-white transition-all duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
 							chatOpen
 								? "bg-cyan-400/18 shadow-[0_0_0_1px_rgba(34,211,238,0.18)]"

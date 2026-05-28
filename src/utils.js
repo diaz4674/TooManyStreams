@@ -43,6 +43,70 @@ export function getTwitchChatSrc(stream, options = {}) {
 	return options.darkMode ? `${baseUrl}&darkpopout` : baseUrl
 }
 
+export function getYouTubeChatSrc(stream) {
+	if (stream?.platform !== "youtube") {
+		return null
+	}
+
+	const target = getYouTubeTarget(stream.channelName)
+	if (target.kind !== "video") {
+		return null
+	}
+
+	const params = new URLSearchParams({
+		v: target.id,
+		embed_domain: getChatEmbedHostname(),
+	})
+
+	return `https://www.youtube.com/live_chat?${params.toString()}`
+}
+
+export function isStreamChatCapable(stream) {
+	if (!stream || typeof stream.channelName !== "string") {
+		return false
+	}
+
+	if (stream.platform === "twitch") {
+		return Boolean(stream.channelName.trim())
+	}
+
+	if (stream.platform === "youtube") {
+		return getYouTubeTarget(stream.channelName).kind === "video"
+	}
+
+	return false
+}
+
+export function getStreamChatSrc(stream, options = {}) {
+	if (!isStreamChatCapable(stream)) {
+		return null
+	}
+
+	if (stream.platform === "twitch") {
+		return getTwitchChatSrc(stream, options)
+	}
+
+	if (stream.platform === "youtube") {
+		return getYouTubeChatSrc(stream)
+	}
+
+	return null
+}
+
+export function isMobileWebBrowser() {
+	if (typeof navigator === "undefined") {
+		return false
+	}
+
+	if (typeof navigator.userAgentData?.mobile === "boolean") {
+		return navigator.userAgentData.mobile
+	}
+
+	return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+		navigator.userAgent ?? "",
+	)
+}
+
 export function getWallLayout({
 	count,
 	containerWidth,
@@ -99,6 +163,15 @@ export function getTwitchParent() {
 	return host
 }
 
+function getChatEmbedHostname() {
+	const host = window.location.hostname
+	if (!host || host === "") {
+		return "localhost"
+	}
+
+	return host
+}
+
 function getCurrentOrigin() {
 	if (typeof window === "undefined") {
 		return "http://localhost"
@@ -109,7 +182,7 @@ function getCurrentOrigin() {
 		: "http://localhost"
 }
 
-function getYouTubeTarget(value) {
+export function getYouTubeTarget(value) {
 	const trimmedValue = value.trim()
 
 	try {

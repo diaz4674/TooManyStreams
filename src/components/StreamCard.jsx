@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react"
+import EmbeddedStreamChat from "./EmbeddedStreamChat"
 import StreamPlayer from "./StreamPlayer"
-import { getTwitchChatSrc } from "../utils"
+import { isStreamChatCapable } from "../utils"
 
 const TWITCH_CARD_AUTOPLAY_THRESHOLD = 0.6
 const APP_RESUME_DEDUP_WINDOW_MS = 400
@@ -86,9 +87,13 @@ function StreamCardComponent({
 }) {
 	const isFocusPresentation = presentation === "focus"
 	const showVolume = stream.platform === "youtube"
+	const isChatCapable = isStreamChatCapable(stream)
 	const showInlineChatToggle =
+		!isFocusPresentation && isChatCapable && typeof onToggleChat === "function"
+	const showInlineChatHint =
 		!isFocusPresentation &&
-		stream.platform === "twitch" &&
+		stream.platform === "youtube" &&
+		!isChatCapable &&
 		typeof onToggleChat === "function"
 	const dragHandleLabel = "Drag to reorder stream"
 	const shouldCropToFill =
@@ -429,16 +434,16 @@ function StreamCardComponent({
 
 				{!isFocusPresentation &&
 					chatExpanded &&
-					stream.platform === "twitch" && (
+					isChatCapable && (
 						<div
 							className="mx-3 mb-3 min-w-0 shrink-0 overflow-hidden rounded-[1rem] border border-cyan-400/14 bg-slate-950"
 							style={{ height: `${inlineChatHeight}px` }}
 						>
-							<iframe
+							<EmbeddedStreamChat
+								stream={stream}
 								title={`${stream.title} inline chat`}
-								src={getTwitchChatSrc(stream, { darkMode: true })}
-								className="h-full w-full border-0 bg-slate-950"
-								loading="eager"
+								iframeClassName="h-full w-full border-0 bg-slate-950"
+								fallbackClassName="flex h-full w-full items-center justify-center px-5 text-center text-sm text-slate-300/82"
 							/>
 						</div>
 					)}
@@ -463,7 +468,7 @@ function StreamCardComponent({
 								Edit
 							</button>
 
-							{showVolume ? (
+							{showVolume && (
 								<label className="flex shrink-0 w-32 items-center gap-2 text-slate-300/74">
 									<i className="fa-solid fa-volume-low text-[0.7rem]" />
 									<input
@@ -479,7 +484,9 @@ function StreamCardComponent({
 										aria-label={`Volume for ${stream.title}`}
 									/>
 								</label>
-							) : showInlineChatToggle ? (
+							)}
+
+							{showInlineChatToggle ? (
 								<button
 									type="button"
 									onClick={() => onToggleChat(stream.id)}
@@ -491,9 +498,13 @@ function StreamCardComponent({
 								>
 									{chatExpanded ? "Hide Chat" : "Open Chat"}
 								</button>
+							) : showInlineChatHint ? (
+								<div className="rounded-full bg-white/8 px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-slate-300/80">
+									Live video ID needed
+								</div>
 							) : (
 								<div className="rounded-full bg-cyan-400/12 px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-cyan-100">
-									Chat Ready
+									{isChatCapable ? "Chat Ready" : "No Chat"}
 								</div>
 							)}
 						</div>

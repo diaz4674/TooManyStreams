@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { getTwitchChatSrc } from "../utils"
+import EmbeddedStreamChat from "./EmbeddedStreamChat"
 
 function StreamTab({ stream, isActive, onSelect }) {
 	return (
@@ -89,12 +89,11 @@ export default function StreamChatSidebar({
 						isOverlay || isImmersive ? "min-h-0 flex-1" : ""
 					}`}
 				>
-					<iframe
-						key={activeStream.id}
+					<EmbeddedStreamChat
+						stream={activeStream}
 						title={`${activeStream.title} chat`}
-						src={getTwitchChatSrc(activeStream, { darkMode: true })}
-						className={frameClassName}
-						loading="eager"
+						iframeClassName={frameClassName}
+						fallbackClassName={`${frameClassName} flex items-center justify-center px-5 text-center text-sm text-slate-300/82`}
 					/>
 				</div>
 			</div>
