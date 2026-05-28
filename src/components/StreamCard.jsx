@@ -1,6 +1,10 @@
-import { memo } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import StreamPlayer from "./StreamPlayer"
 import { getTwitchChatSrc } from "../utils"
+
+const TWITCH_CARD_AUTOPLAY_THRESHOLD = 0.6
+const APP_RESUME_DEDUP_WINDOW_MS = 400
+const CINEMA_PRIMARY_AUTOPLAY_RETRY_DELAYS_MS = [0, 320, 900, 1700]
 
 function PlatformLogo({ platform }) {
 	if (platform === "twitch") {
@@ -75,6 +79,8 @@ function StreamCardComponent({
 	onExitFocus,
 	onPromoteFocus,
 	onRemoveFromFocus,
+	onPlayerReady,
+	loadSessionKey,
 	canManageStreamMembership = true,
 	canReorderStreamMembership = true,
 }) {
@@ -87,12 +93,190 @@ function StreamCardComponent({
 	const dragHandleLabel = "Drag to reorder stream"
 	const shouldCropToFill =
 		stream.platform === "youtube" && (fluidVideo || isFocusPresentation)
+	const articleRef = useRef(null)
+	const isCardVisibleRef = useRef(isFocusPresentation)
+	const lastAppResumeAtRef = useRef(0)
+	const cinemaAutoplayTimeoutsRef = useRef([])
+	const [viewportPlaybackToken, setViewportPlaybackToken] = useState(0)
+	const combinedPlaybackToken = playbackToken + viewportPlaybackToken
+
+	const getCardVisibility = () => {
+		const node = articleRef.current
+		if (!node) {
+			return false
+		}
+
+		const rect = node.getBoundingClientRect()
+		const totalArea = rect.width * rect.height
+		if (totalArea <= 0) {
+			return false
+		}
+
+		const visibleWidth = Math.max(
+			0,
+			Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0),
+		)
+		const visibleHeight = Math.max(
+			0,
+			Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0),
+		)
+		const visibleArea = visibleWidth * visibleHeight
+		return visibleArea / totalArea >= TWITCH_CARD_AUTOPLAY_THRESHOLD
+	}
+
 	const handleFocusVolumeChange = (nextVolume) => {
 		onVolumeChange(stream.id, nextVolume)
 	}
 
+	useEffect(() => {
+		isCardVisibleRef.current = isFocusPresentation
+	}, [isFocusPresentation, stream.id])
+
+	useEffect(() => {
+		if (stream.platform !== "twitch" || isFocusPresentation) {
+			return undefined
+		}
+
+		const node = articleRef.current
+		if (!node) {
+			return undefined
+		}
+
+		if (typeof IntersectionObserver === "undefined") {
+			isCardVisibleRef.current = true
+			setViewportPlaybackToken((token) => token + 1)
+			return undefined
+		}
+
+		let wasVisible = false
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				const isVisible =
+					entry.isIntersecting &&
+					entry.intersectionRatio >= TWITCH_CARD_AUTOPLAY_THRESHOLD
+				isCardVisibleRef.current = isVisible
+
+				if (isVisible && !wasVisible) {
+					setViewportPlaybackToken((token) => token + 1)
+				}
+
+				wasVisible = isVisible
+			},
+			{
+				threshold: [0, TWITCH_CARD_AUTOPLAY_THRESHOLD],
+			},
+		)
+
+		observer.observe(node)
+
+		return () => {
+			observer.disconnect()
+		}
+	}, [isFocusPresentation, stream.id, stream.platform])
+
+	useEffect(() => {
+		if (stream.platform !== "twitch") {
+			return undefined
+		}
+
+		const checkCardVisibilityAndResume = () => {
+			if (document.visibilityState !== "visible") {
+				return
+			}
+
+			const isVisible = getCardVisibility()
+			if (!isVisible) {
+				return
+			}
+
+			isCardVisibleRef.current = true
+
+			const now = Date.now()
+			if (now - lastAppResumeAtRef.current < APP_RESUME_DEDUP_WINDOW_MS) {
+				return
+			}
+
+			lastAppResumeAtRef.current = now
+			setViewportPlaybackToken((token) => token + 1)
+		}
+
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === "visible") {
+				checkCardVisibilityAndResume()
+			}
+		}
+
+		document.addEventListener("visibilitychange", handleVisibilityChange)
+		window.addEventListener("focus", checkCardVisibilityAndResume)
+
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange)
+			window.removeEventListener("focus", checkCardVisibilityAndResume)
+		}
+	}, [stream.platform])
+
+	useEffect(() => {
+		const isCinemaPrimaryTwitch =
+			stream.platform === "twitch" &&
+			isFocusPresentation &&
+			focusTileRole === "primary"
+		if (!isCinemaPrimaryTwitch) {
+			for (const timeoutId of cinemaAutoplayTimeoutsRef.current) {
+				window.clearTimeout(timeoutId)
+			}
+			cinemaAutoplayTimeoutsRef.current = []
+			return undefined
+		}
+
+		const clearCinemaAutoplayTimeouts = () => {
+			for (const timeoutId of cinemaAutoplayTimeoutsRef.current) {
+				window.clearTimeout(timeoutId)
+			}
+			cinemaAutoplayTimeoutsRef.current = []
+		}
+
+		const scheduleCinemaPrimaryAutoplay = () => {
+			if (document.visibilityState !== "visible") {
+				return
+			}
+
+			clearCinemaAutoplayTimeouts()
+			cinemaAutoplayTimeoutsRef.current =
+				CINEMA_PRIMARY_AUTOPLAY_RETRY_DELAYS_MS.map((delayMs) =>
+					window.setTimeout(() => {
+						if (document.visibilityState !== "visible") {
+							return
+						}
+
+						setViewportPlaybackToken((token) => token + 1)
+					}, delayMs),
+				)
+		}
+
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === "visible") {
+				scheduleCinemaPrimaryAutoplay()
+			}
+		}
+
+		// Entering cinema mode should aggressively re-request playback
+		// because Twitch can keep the player paused after layout transitions.
+		scheduleCinemaPrimaryAutoplay()
+		document.addEventListener("visibilitychange", handleVisibilityChange)
+		window.addEventListener("focus", scheduleCinemaPrimaryAutoplay)
+		window.addEventListener("pageshow", scheduleCinemaPrimaryAutoplay)
+
+		return () => {
+			clearCinemaAutoplayTimeouts()
+			document.removeEventListener("visibilitychange", handleVisibilityChange)
+			window.removeEventListener("focus", scheduleCinemaPrimaryAutoplay)
+			window.removeEventListener("pageshow", scheduleCinemaPrimaryAutoplay)
+		}
+	}, [focusTileRole, isFocusPresentation, stream.platform])
+
 	return (
 		<article
+			ref={articleRef}
 			className={`relative flex h-full min-w-0 overflow-hidden ${
 				isFocusPresentation
 					? "rounded-[1.7rem] border border-white/10 bg-slate-950/94 shadow-[0_28px_90px_rgba(2,6,23,0.62)]"
@@ -184,7 +368,9 @@ function StreamCardComponent({
 						volume={volume}
 						muted={forcedMuted}
 						cropToFill={shouldCropToFill}
-						playbackToken={playbackToken}
+						playbackToken={combinedPlaybackToken}
+						onReady={onPlayerReady}
+						loadSessionKey={loadSessionKey}
 					/>
 
 					{isFocusPresentation && (

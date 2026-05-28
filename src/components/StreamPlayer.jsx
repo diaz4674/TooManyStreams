@@ -8,6 +8,8 @@ const TWITCH_MIN_AUTOPLAY_WIDTH_PX = 400
 const TWITCH_MIN_AUTOPLAY_HEIGHT_PX = 300
 const TWITCH_PLAYBACK_RECOVERY_WINDOW_MS = 1600
 const TWITCH_PLAYBACK_RETRY_DELAY_MS = 250
+const TWITCH_TAB_RESUME_RETRY_DELAYS_MS = [0, 320, 900, 1700]
+const TWITCH_TAB_RESUME_REBUILD_FALLBACK_DELAY_MS = 2800
 
 function loadTwitchSdk() {
 	if (window.Twitch?.Player) {
@@ -184,6 +186,8 @@ function TwitchEmbed({
 	muted = true,
 	shouldAutoplay = true,
 	playbackToken = 0,
+	onReady,
+	loadSessionKey,
 }) {
 	const [playerBuildKey, setPlayerBuildKey] = useState(0)
 	const playerId = `twitch-player-${stream.id}-${playerBuildKey}`
@@ -197,9 +201,14 @@ function TwitchEmbed({
 		token: 0,
 		deadline: 0,
 	})
+	const resumePlaybackTokenRef = useRef(0)
+	const resumeAttemptIdRef = useRef(0)
+	const resumeRetryTimeoutsRef = useRef([])
+	const resumeRebuildTimeoutRef = useRef(null)
 	const retryTimeoutRef = useRef(null)
 	const [sdkFailed, setSdkFailed] = useState(false)
 	const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+	const readySignalSentRef = useRef(false)
 	mutedRef.current = muted
 	playbackTokenRef.current = playbackToken
 	const meetsAutoplaySizeRequirement =
@@ -209,6 +218,19 @@ function TwitchEmbed({
 		muted,
 		autoplay: shouldAutoplay,
 	})
+
+	useEffect(() => {
+		readySignalSentRef.current = false
+	}, [loadSessionKey, stream.channelName, stream.id])
+
+	const notifyReady = useCallback(() => {
+		if (readySignalSentRef.current) {
+			return
+		}
+
+		readySignalSentRef.current = true
+		onReady?.(stream.id, loadSessionKey)
+	}, [loadSessionKey, onReady, stream.id])
 
 	useEffect(() => {
 		const node = containerRef.current
@@ -246,6 +268,15 @@ function TwitchEmbed({
 		retryTimeoutRef.current = null
 	}, [])
 
+	const clearResumeRetryRequests = useCallback(() => {
+		for (const timeoutId of resumeRetryTimeoutsRef.current) {
+			window.clearTimeout(timeoutId)
+		}
+		resumeRetryTimeoutsRef.current = []
+		window.clearTimeout(resumeRebuildTimeoutRef.current)
+		resumeRebuildTimeoutRef.current = null
+	}, [])
+
 	const schedulePendingPlaybackCheck = useCallback(
 		(token) => {
 			window.clearTimeout(retryTimeoutRef.current)
@@ -260,7 +291,7 @@ function TwitchEmbed({
 				}
 
 				const player = playerRef.current
-				if (!player || !readyRef.current || !meetsAutoplaySizeRequirement) {
+				if (!player || !readyRef.current) {
 					schedulePendingPlaybackCheck(token)
 					return
 				}
@@ -273,7 +304,7 @@ function TwitchEmbed({
 				schedulePendingPlaybackCheck(token)
 			}, TWITCH_PLAYBACK_RETRY_DELAY_MS)
 		},
-		[clearPendingPlaybackRequest, meetsAutoplaySizeRequirement],
+		[clearPendingPlaybackRequest],
 	)
 
 	const startPendingPlaybackRequest = useCallback(
@@ -288,7 +319,7 @@ function TwitchEmbed({
 				deadline: Date.now() + TWITCH_PLAYBACK_RECOVERY_WINDOW_MS,
 			}
 
-			if (readyRef.current && playerRef.current && meetsAutoplaySizeRequirement) {
+			if (readyRef.current && playerRef.current) {
 				playerRef.current.setMuted(true)
 				playerRef.current.play()
 			}
@@ -297,7 +328,6 @@ function TwitchEmbed({
 		},
 		[
 			clearPendingPlaybackRequest,
-			meetsAutoplaySizeRequirement,
 			schedulePendingPlaybackCheck,
 		],
 	)
@@ -343,6 +373,7 @@ function TwitchEmbed({
 
 					readyRef.current = true
 					player.setMuted(Boolean(mutedRef.current))
+					notifyReady()
 
 					if (playbackTokenRef.current > 0) {
 						startPendingPlaybackRequest(playbackTokenRef.current)
@@ -401,6 +432,7 @@ function TwitchEmbed({
 				)
 			}
 			clearPendingPlaybackRequest()
+			clearResumeRetryRequests()
 			if (typeof player?.destroy === "function") {
 				player.destroy()
 			} else {
@@ -410,9 +442,11 @@ function TwitchEmbed({
 		}
 	}, [
 		clearPendingPlaybackRequest,
+		clearResumeRetryRequests,
 		containerSize.height,
 		containerSize.width,
 		meetsAutoplaySizeRequirement,
+		notifyReady,
 		playerId,
 		shouldAutoplay,
 		startPendingPlaybackRequest,
@@ -436,6 +470,82 @@ function TwitchEmbed({
 		// Entering cinema mode is an explicit muted playback request.
 		startPendingPlaybackRequest(playbackToken)
 	}, [playbackToken, startPendingPlaybackRequest])
+
+	useEffect(() => {
+		if (!shouldAutoplay) {
+			clearResumeRetryRequests()
+			return undefined
+		}
+
+		const scheduleTabResumePlayback = () => {
+			if (document.visibilityState !== "visible") {
+				return
+			}
+
+			resumeAttemptIdRef.current += 1
+			const attemptId = resumeAttemptIdRef.current
+			clearResumeRetryRequests()
+			resumeRetryTimeoutsRef.current = TWITCH_TAB_RESUME_RETRY_DELAYS_MS.map(
+				(delayMs) =>
+					window.setTimeout(() => {
+						if (
+							document.visibilityState !== "visible" ||
+							!readyRef.current ||
+							!playerRef.current ||
+							attemptId !== resumeAttemptIdRef.current
+						) {
+							return
+						}
+
+						resumePlaybackTokenRef.current += 1
+						startPendingPlaybackRequest(
+							100_000 + resumePlaybackTokenRef.current,
+						)
+					}, delayMs),
+			)
+
+			resumeRebuildTimeoutRef.current = window.setTimeout(() => {
+				if (
+					document.visibilityState !== "visible" ||
+					attemptId !== resumeAttemptIdRef.current ||
+					!readyRef.current
+				) {
+					return
+				}
+
+				const player = playerRef.current
+				if (!player || !player.isPaused?.()) {
+					return
+				}
+
+				setPlayerBuildKey((key) => key + 1)
+			}, TWITCH_TAB_RESUME_REBUILD_FALLBACK_DELAY_MS)
+		}
+
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === "visible") {
+				scheduleTabResumePlayback()
+			}
+		}
+
+		document.addEventListener("visibilitychange", handleVisibilityChange)
+		window.addEventListener("focus", scheduleTabResumePlayback)
+		window.addEventListener("pageshow", scheduleTabResumePlayback)
+
+		return () => {
+			clearResumeRetryRequests()
+			document.removeEventListener(
+				"visibilitychange",
+				handleVisibilityChange,
+			)
+			window.removeEventListener("focus", scheduleTabResumePlayback)
+			window.removeEventListener("pageshow", scheduleTabResumePlayback)
+		}
+	}, [
+		clearResumeRetryRequests,
+		shouldAutoplay,
+		startPendingPlaybackRequest,
+	])
 
 	useEffect(() => {
 		if (
@@ -463,6 +573,7 @@ function TwitchEmbed({
 					allowFullScreen
 					allow="autoplay; fullscreen; picture-in-picture"
 					loading="eager"
+					onLoad={notifyReady}
 				/>
 			) : (
 				<div id={playerId} className="absolute inset-0 h-full w-full" />
@@ -478,10 +589,13 @@ function YouTubeEmbed({
 	muted = false,
 	shouldAutoplay = true,
 	playbackToken = 0,
+	onReady,
+	loadSessionKey,
 }) {
 	const iframeId = `youtube-player-${stream.id}`
 	const playerRef = useRef(null)
 	const readyRef = useRef(false)
+	const readySignalSentRef = useRef(false)
 	const settingsRef = useRef({
 		frameStyle: null,
 		muted,
@@ -502,6 +616,19 @@ function YouTubeEmbed({
 		shouldAutoplay,
 		volume,
 	}
+
+	useEffect(() => {
+		readySignalSentRef.current = false
+	}, [loadSessionKey, stream.channelName, stream.id])
+
+	const notifyReady = useCallback(() => {
+		if (readySignalSentRef.current) {
+			return
+		}
+
+		readySignalSentRef.current = true
+		onReady?.(stream.id, loadSessionKey)
+	}, [loadSessionKey, onReady, stream.id])
 
 	const syncIframeStyles = (player, nextFrameStyle) => {
 		const iframe = player?.getIframe?.()
@@ -528,6 +655,7 @@ function YouTubeEmbed({
 							readyRef.current = true
 							syncIframeStyles(event.target, settings.frameStyle)
 							event.target.setVolume(settings.volume)
+							notifyReady()
 
 							if (settings.playbackToken > 0) {
 								event.target.mute()
@@ -557,7 +685,7 @@ function YouTubeEmbed({
 			}
 			playerRef.current = null
 		}
-	}, [iframeId, iframeSrc, stream.id])
+	}, [iframeId, iframeSrc, notifyReady, stream.id])
 
 	useEffect(() => {
 		const player = playerRef.current
@@ -614,6 +742,7 @@ function YouTubeEmbed({
 				allowFullScreen
 				allow="autoplay; fullscreen; picture-in-picture"
 				loading="eager"
+				onLoad={notifyReady}
 			/>
 		</div>
 	)
@@ -626,6 +755,8 @@ function StreamPlayerComponent({
 	muted,
 	shouldAutoplay,
 	playbackToken = 0,
+	onReady,
+	loadSessionKey,
 }) {
 	if (stream.platform === "twitch") {
 		return (
@@ -635,6 +766,8 @@ function StreamPlayerComponent({
 				muted={muted ?? true}
 				shouldAutoplay={shouldAutoplay ?? true}
 				playbackToken={playbackToken}
+				onReady={onReady}
+				loadSessionKey={loadSessionKey}
 			/>
 		)
 	}
@@ -648,6 +781,8 @@ function StreamPlayerComponent({
 				muted={muted ?? false}
 				shouldAutoplay={shouldAutoplay ?? true}
 				playbackToken={playbackToken}
+				onReady={onReady}
+				loadSessionKey={loadSessionKey}
 			/>
 		)
 	}
@@ -663,6 +798,8 @@ const StreamPlayer = memo(
 		previousProps.muted === nextProps.muted &&
 		previousProps.shouldAutoplay === nextProps.shouldAutoplay &&
 		previousProps.playbackToken === nextProps.playbackToken &&
+		previousProps.onReady === nextProps.onReady &&
+		previousProps.loadSessionKey === nextProps.loadSessionKey &&
 		previousProps.stream.id === nextProps.stream.id &&
 		previousProps.stream.platform === nextProps.stream.platform &&
 		previousProps.stream.channelName === nextProps.stream.channelName &&

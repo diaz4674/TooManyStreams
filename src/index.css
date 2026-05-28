@@ -56,3 +56,22 @@ body {
 			0 18px 48px rgba(8, 15, 35, 0.4);
 	}
 }
+
+@keyframes wallLoaderFloat {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-8px);
+	}
+}
+
+.wall-loader-shell {
+	animation: neonPulse 2.8s ease-in-out infinite;
+}
+
+.wall-loader-image {
+	animation: wallLoaderFloat 2.8s ease-in-out infinite;
+	filter: drop-shadow(0 18px 38px rgba(34, 211, 238, 0.18));
+}

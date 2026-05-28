@@ -12,6 +12,7 @@ import {
 	useSortable,
 } from "@dnd-kit/sortable"
 import { useShallow } from "zustand/react/shallow"
+import loaderSrc from "../../assets/loader.png"
 import StreamCard from "./StreamCard"
 import StreamPlayer from "./StreamPlayer"
 import StreamChatSidebar from "./StreamChatSidebar"
@@ -40,6 +41,7 @@ const FOCUS_CHAT_DRAWER_MAX_HEIGHT_PX = 832
 const FOCUS_CHAT_DRAWER_MIN_WIDTH_PX = 280
 const FOCUS_CHAT_DRAWER_MIN_HEIGHT_PX = 240
 const FOCUS_CHAT_RESIZE_HIT_SIZE_PX = 12
+const WALL_LOADER_TIMEOUT_MS = 7000
 
 function clamp(value, min, max) {
 	return Math.min(Math.max(value, min), max)
@@ -55,6 +57,23 @@ function getTransformStyle(transform) {
 
 function getGridRowSpan(heightPx, rowUnitPx, gapPx) {
 	return Math.max(1, Math.ceil((heightPx + gapPx) / (rowUnitPx + gapPx)))
+}
+
+function WallLoaderOverlay({ loadingCount }) {
+	return (
+		<div className="absolute inset-0 z-[85] flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_32%),linear-gradient(180deg,rgba(2,6,23,0.92),rgba(8,15,35,0.9))] px-4 backdrop-blur-sm">
+			<div className="wall-loader-shell w-full max-w-[32rem] rounded-[2rem] border border-white/10 bg-slate-950/36 p-4 shadow-[0_30px_90px_rgba(2,6,23,0.58)]">
+				<img
+					src={loaderSrc}
+					alt="Coots loading the wall"
+					className="wall-loader-image block h-auto w-full"
+				/>
+				<p className="mt-3 mb-0 text-center text-[0.72rem] font-bold uppercase tracking-[0.2em] text-cyan-100/76">
+					Loading {loadingCount} stream{loadingCount === 1 ? "" : "s"}
+				</p>
+			</div>
+		</div>
+	)
 }
 
 function getFocusCardProps({
@@ -778,6 +797,8 @@ function SortableStreamCard({
 	onPromoteFocusStream,
 	onRemoveFocusCompanion,
 	onPrimaryFocusTransitionSettled,
+	onPlayerReady,
+	loadSessionKey,
 	chatExpanded = false,
 	canManageStreamMembership = true,
 	canReorderStreamMembership = true,
@@ -921,6 +942,8 @@ function SortableStreamCard({
 				onEdit={onEdit}
 				onToggleChat={onToggleChat}
 				onFocus={onFocus}
+				onPlayerReady={onPlayerReady}
+				loadSessionKey={loadSessionKey}
 				isFocused={isInFocusComposition}
 				chatExpanded={chatExpanded}
 				inlineChatHeight={INLINE_CHAT_PANEL_HEIGHT_PX}
@@ -957,6 +980,8 @@ function AutoStreamGrid({
 	onPromoteFocusStream,
 	onRemoveFocusCompanion,
 	onPrimaryFocusTransitionSettled,
+	onPlayerReady,
+	loadSessionKey,
 	canManageStreamMembership = true,
 	canReorderStreamMembership = true,
 }) {
@@ -1045,6 +1070,8 @@ function AutoStreamGrid({
 					onPromoteFocusStream,
 					onRemoveFocusCompanion,
 					onPrimaryFocusTransitionSettled,
+					onPlayerReady,
+					loadSessionKey,
 					chatExpanded,
 					canManageStreamMembership,
 					canReorderStreamMembership,
@@ -1076,6 +1103,8 @@ function MatrixStreamGrid({
 	streamVolumes,
 	containerSize,
 	maxColumns = 4,
+	onPlayerReady,
+	loadSessionKey,
 }) {
 	const layout = useMemo(
 		() =>
@@ -1110,6 +1139,8 @@ function MatrixStreamGrid({
 					<StreamPlayer
 						stream={stream}
 						volume={streamVolumes[stream.id] ?? 100}
+						onReady={onPlayerReady}
+						loadSessionKey={loadSessionKey}
 					/>
 				</div>
 			))}
@@ -1153,11 +1184,28 @@ export default function StreamGrid({
 	const focusChatStreamId = focusState?.focusChatStreamId ?? null
 	const [focusPlaybackToken, setFocusPlaybackToken] = useState(0)
 	const [primaryFocusTransitionKey, setPrimaryFocusTransitionKey] = useState(0)
+	const [showWallLoader, setShowWallLoader] = useState(streams.length > 0)
+	const [pendingStreamIds, setPendingStreamIds] = useState(
+		() => new Set(streams.map((stream) => stream.id)),
+	)
 	const primaryFocusedStreamId = focusedStreamIds[0] ?? null
 	const primaryFocusedStreamIdRef = useRef(primaryFocusedStreamId)
 	const primaryFocusTransitionKeyRef = useRef(primaryFocusTransitionKey)
+	const activeLoadSessionKeyRef = useRef("")
 	primaryFocusedStreamIdRef.current = primaryFocusedStreamId
 	primaryFocusTransitionKeyRef.current = primaryFocusTransitionKey
+	const loadSessionKey = useMemo(
+		() =>
+			streams
+				.map(
+					(stream) =>
+						`${stream.id}:${stream.platform}:${stream.channelName}`,
+				)
+				.sort()
+				.join("|"),
+		[streams],
+	)
+	activeLoadSessionKeyRef.current = loadSessionKey
 
 	useEffect(() => {
 		const node = containerRef.current
@@ -1217,6 +1265,49 @@ export default function StreamGrid({
 		},
 		[],
 	)
+
+	useEffect(() => {
+		if (streams.length === 0) {
+			setPendingStreamIds(new Set())
+			setShowWallLoader(false)
+			return undefined
+		}
+
+		setPendingStreamIds(new Set(streams.map((stream) => stream.id)))
+		setShowWallLoader(true)
+
+		const timeoutId = window.setTimeout(() => {
+			if (activeLoadSessionKeyRef.current === loadSessionKey) {
+				setShowWallLoader(false)
+			}
+		}, WALL_LOADER_TIMEOUT_MS)
+
+		return () => {
+			window.clearTimeout(timeoutId)
+		}
+	}, [loadSessionKey])
+
+	useEffect(() => {
+		if (pendingStreamIds.size === 0) {
+			setShowWallLoader(false)
+		}
+	}, [pendingStreamIds])
+
+	const handlePlayerReady = useCallback((streamId, readyLoadSessionKey) => {
+		if (readyLoadSessionKey !== activeLoadSessionKeyRef.current) {
+			return
+		}
+
+		setPendingStreamIds((current) => {
+			if (!current.has(streamId)) {
+				return current
+			}
+
+			const next = new Set(current)
+			next.delete(streamId)
+			return next
+		})
+	}, [])
 
 	const isMatrixMode = layoutMode === "matrix"
 	const hasActiveFocus = focusedStreamIds.length > 0
@@ -1296,8 +1387,8 @@ export default function StreamGrid({
 			ref={containerRef}
 			className={
 				isMatrixMode
-					? "h-full min-h-0 min-w-0 w-full flex-1 overflow-y-auto bg-black"
-					: "min-h-[calc(100vh-13rem)] min-w-0 w-full flex-1 transition-opacity duration-300"
+					? "relative h-full min-h-0 min-w-0 w-full flex-1 overflow-y-auto bg-black"
+					: "relative min-h-[calc(100vh-13rem)] min-w-0 w-full flex-1 transition-opacity duration-300"
 			}
 		>
 			{hasActiveFocus && !isMatrixMode && (
@@ -1326,6 +1417,8 @@ export default function StreamGrid({
 					streamVolumes={streamVolumes}
 					containerSize={containerSize}
 					maxColumns={maxColumns}
+					onPlayerReady={handlePlayerReady}
+					loadSessionKey={loadSessionKey}
 				/>
 			) : (
 				<AutoStreamGrid
@@ -1349,9 +1442,15 @@ export default function StreamGrid({
 					onPromoteFocusStream={onPromoteFocusStream}
 					onRemoveFocusCompanion={onRemoveFocusCompanion}
 					onPrimaryFocusTransitionSettled={handlePrimaryFocusTransitionSettled}
+					onPlayerReady={handlePlayerReady}
+					loadSessionKey={loadSessionKey}
 					canManageStreamMembership={canManageStreamMembership}
 					canReorderStreamMembership={canReorderStreamMembership}
 				/>
+			)}
+
+			{showWallLoader && pendingStreamIds.size > 0 && (
+				<WallLoaderOverlay loadingCount={pendingStreamIds.size} />
 			)}
 		</section>
 	)
