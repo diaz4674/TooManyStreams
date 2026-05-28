@@ -6,6 +6,11 @@ function normalizeHost(host) {
 	return host.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
+function normalizeOrigin(origin) {
+	const normalizedHost = normalizeHost(String(origin ?? "").trim())
+	return normalizedHost ? `https://${normalizedHost}` : ""
+}
+
 function normalizePathname(pathname) {
 	if (!pathname) {
 		return "/"
@@ -29,6 +34,10 @@ function buildHttpsUrl(host, pathname) {
 
 export function getPublicEnv(name) {
 	return readEnvValue(name)
+}
+
+export function getSiteOrigin() {
+	return normalizeOrigin(readEnvValue("VITE_SITE_URL")) || "https://toomanystreams.app"
 }
 
 export function getCurrentAppPathname() {
@@ -85,4 +94,12 @@ export function getVercelAppUrl(pathname = getCurrentAppPathname()) {
 	}
 
 	return buildHttpsUrl(readEnvValue("VITE_VERCEL_URL"), pathname)
+}
+
+export function getCanonicalUrl(pathname = "/") {
+	return new URL(normalizePathname(pathname), `${getSiteOrigin()}/`).toString()
+}
+
+export function getSocialPreviewUrl() {
+	return getCanonicalUrl("/preview.png")
 }

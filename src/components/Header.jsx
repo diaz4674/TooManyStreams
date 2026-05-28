@@ -31,16 +31,32 @@ export default function Header({
 	return (
 		<header className="mb-5 grid gap-4">
 			<div className="flex items-start justify-between gap-4 max-md:flex-col">
-				<div>
+				<div className="max-w-[54rem]">
 					<img
 						src={logoSrc}
 						alt="TooManyStreams"
 						className="h-auto w-[min(34rem,100%)] max-w-full drop-shadow-[0_14px_32px_rgba(8,15,35,0.28)]"
 					/>
 					<h1 className="mt-1 mb-1.5 max-w-[54rem] text-[clamp(2rem,4vw,3.15rem)] leading-[0.95] tracking-tight">
-						TooManyStreams keeps the whole squad on screen without the tab circus.
+						Watch Multiple Twitch and YouTube Streams at Once
 					</h1>
-					<p className="m-0 text-base text-slate-300/80">
+					<p className="m-0 max-w-3xl text-base text-slate-300/84">
+						TooManyStreams is a free multi-stream viewer that lets you build
+						your own stream wall, watch multiple Twitch and YouTube streams in
+						one browser tab, switch the main audio, rearrange streams, and
+						follow live events without the tab circus.
+					</p>
+					<div className="mt-5 flex flex-wrap gap-3">
+						<button
+							type="button"
+							onClick={onOpenDialog}
+							className="inline-flex items-center gap-2 rounded-2xl border-0 bg-gradient-to-br from-fuchsia-600 to-violet-600 px-5 py-3.5 font-bold text-white shadow-[0_18px_30px_rgba(124,58,237,0.28)] transition-all duration-300 cursor-pointer hover:-translate-y-px hover:shadow-[0_24px_40px_rgba(124,58,237,0.34)]"
+						>
+							<i className="fa-solid fa-play" />
+							Start Watching
+						</button>
+					</div>
+					<p className="mt-4 mb-0 text-base text-slate-300/76">
 						{activeProjectName}
 						{" | "}
 						{streamCount} {streamCount === 1 ? "stream" : "streams"}
