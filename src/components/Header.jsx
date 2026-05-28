@@ -44,7 +44,16 @@ export default function Header({
 						TooManyStreams is a free multi-stream viewer that lets you build
 						your own stream wall, watch multiple Twitch and YouTube streams in
 						one browser tab, switch the main audio, rearrange streams, and
-						follow live events without the tab circus.
+						follow live events without the tab circus. See the{" "}
+						<a
+							href="https://www.youtube.com/watch?v=x1ilDPXPVVg"
+							target="_blank"
+							rel="noreferrer"
+							className="font-semibold text-cyan-300 underline decoration-cyan-400/60 underline-offset-3 transition-colors hover:text-cyan-200"
+						>
+							inspiration and some of the features showcase on YouTube
+						</a>
+						.
 					</p>
 					<div className="mt-5 flex flex-wrap gap-3">
 						<button
@@ -119,7 +128,9 @@ export default function Header({
 								: "bg-white/8"
 						} hover:-translate-y-px hover:bg-white/12`}
 					>
-						<i className={`fa-solid ${chatOpen ? "fa-comments" : "fa-comment"} mr-2`} />
+						<i
+							className={`fa-solid ${chatOpen ? "fa-comments" : "fa-comment"} mr-2`}
+						/>
 						{chatOpen ? "Hide Chat" : "Show Chat"}
 					</button>
 
