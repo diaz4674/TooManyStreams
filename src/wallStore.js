@@ -1,7 +1,8 @@
 import { create } from "zustand"
 
-const DEFAULT_FOCUS_LAYOUT = "hero"
-const MAX_FOCUSED_STREAMS = 3
+const DEFAULT_FOCUS_LAYOUT = "single"
+const MAX_FOCUSED_STREAMS = 5
+const VALID_FOCUS_LAYOUTS = new Set(["single", "stacked", "equal"])
 
 function uniqueIds(ids) {
 	return [...new Set(ids.filter((id) => typeof id === "string" && id))]
@@ -49,6 +50,10 @@ function getDefaultFocusState() {
 		focusChatOpen: false,
 		focusChatStreamId: null,
 	}
+}
+
+function isValidFocusLayout(layout) {
+	return VALID_FOCUS_LAYOUTS.has(layout)
 }
 
 function getFocusedChatCapableStreamIds(focusedStreamIds, chatCapableStreamIds) {
@@ -138,8 +143,9 @@ export const useWallStore = create((set) => ({
 					: state.focusChatOpen
 				: false
 			const nextFocusLayout =
-				nextFocusedStreamIds.length > 1 && state.focusLayout === "equal"
-					? "equal"
+				nextFocusedStreamIds.length > 0 &&
+				isValidFocusLayout(state.focusLayout)
+					? state.focusLayout
 					: DEFAULT_FOCUS_LAYOUT
 			const nextStreamVolumes = Object.fromEntries(
 				Object.entries(state.streamVolumes).filter(([id]) =>
@@ -293,7 +299,8 @@ export const useWallStore = create((set) => ({
 				...state,
 				focusedStreamIds: nextFocusedStreamIds,
 				focusLayout:
-					nextFocusedStreamIds.length > 1
+					nextFocusedStreamIds.length > 0 &&
+					isValidFocusLayout(state.focusLayout)
 						? state.focusLayout
 						: DEFAULT_FOCUS_LAYOUT,
 				focusChatOpen: nextFocusChatStreamId ? state.focusChatOpen : false,
@@ -326,7 +333,7 @@ export const useWallStore = create((set) => ({
 	},
 	setFocusLayout(layout) {
 		set((state) =>
-			layout !== "hero" && layout !== "equal"
+			!isValidFocusLayout(layout)
 				? state
 				: {
 						...state,

@@ -28,10 +28,11 @@ const INLINE_CHAT_ADDED_HEIGHT_PX =
 	INLINE_CHAT_PANEL_HEIGHT_PX + INLINE_CHAT_MARGIN_BOTTOM_PX
 const FOCUS_WIDE_MIN_WIDTH_PX = 1280
 const FOCUS_WIDE_MIN_HEIGHT_PX = 720
-const FOCUS_MAX_STREAMS = 3
+const FOCUS_MAX_STREAMS = 5
 const FOCUS_OVERLAY_PADDING_PX = 24
 const FOCUS_OVERLAY_SMALL_PADDING_PX = 16
 const FOCUS_OVERLAY_GAP_PX = 16
+const FOCUS_STACKED_MIN_COMPANION_HEIGHT_PX = 148
 const FOCUS_TOOLBAR_OFFSET_PX = 68
 const FOCUS_TRANSITION_DURATION_MS = 320
 const FOCUS_OPACITY_TRANSITION_DURATION_MS = 220
@@ -45,6 +46,10 @@ const PREVIEW_CHAT_PANEL_WIDTH_PX = 360
 const PREVIEW_CHAT_PANEL_GAP_PX = 20
 const PREVIEW_CHAT_MIN_VIEWPORT_WIDTH_PX = 1080
 const PREVIEW_CHAT_MIN_CONTENT_WIDTH_PX = 480
+const FOCUS_ADD_MENU_GAP_PX = 12
+const FOCUS_ADD_MENU_MAX_WIDTH_PX = 420
+const FOCUS_ADD_MENU_MIN_WIDTH_PX = 280
+const FOCUS_ADD_MENU_MAX_HEIGHT_PX = 360
 const WALL_LOADER_TIMEOUT_MS = 7000
 
 function clamp(value, min, max) {
@@ -65,18 +70,20 @@ function getGridRowSpan(heightPx, rowUnitPx, gapPx) {
 
 function WallLoaderOverlay({ loadingCount }) {
 	return (
-		<div className="absolute inset-0 z-[85] flex items-start justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_32%),linear-gradient(180deg,rgba(2,6,23,0.92),rgba(8,15,35,0.9))] px-4 pt-8 pb-4 backdrop-blur-sm sm:pt-10 lg:pt-12">
-			<div className="wall-loader-shell w-full max-w-[32rem] overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/36 p-4 pt-3 shadow-[0_30px_90px_rgba(2,6,23,0.58)]">
-				<div className="wall-loader-stage">
-					<img
-						src={loaderSrc}
-						alt="Coots loading the wall"
-						className="wall-loader-image block h-auto w-full"
-					/>
+		<div className="absolute inset-0 z-[85] bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_32%),linear-gradient(180deg,rgba(2,6,23,0.92),rgba(8,15,35,0.9))] px-4 pb-4 backdrop-blur-sm pointer-events-none">
+			<div className="sticky top-6 flex justify-center pt-8 sm:top-8 sm:pt-10 lg:top-10 lg:pt-12">
+				<div className="wall-loader-shell w-full max-w-[32rem] overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/36 p-4 pt-3 shadow-[0_30px_90px_rgba(2,6,23,0.58)]">
+					<div className="wall-loader-stage">
+						<img
+							src={loaderSrc}
+							alt="Coots loading the wall"
+							className="wall-loader-image block h-auto w-full"
+						/>
+					</div>
+					<p className="mt-3 mb-0 text-center text-[0.72rem] font-bold uppercase tracking-[0.2em] text-cyan-100/76">
+						Loading {loadingCount} stream{loadingCount === 1 ? "" : "s"}
+					</p>
 				</div>
-				<p className="mt-3 mb-0 text-center text-[0.72rem] font-bold uppercase tracking-[0.2em] text-cyan-100/76">
-					Loading {loadingCount} stream{loadingCount === 1 ? "" : "s"}
-				</p>
 			</div>
 		</div>
 	)
@@ -96,6 +103,7 @@ function getFocusCardProps({
 	return {
 		presentation: "focus",
 		focusTileRole: focusFrame.role,
+		focusTilePlacement: focusFrame.placement ?? "main",
 		onExitFocus: focusFrame.role === "primary" ? onClearFocus : undefined,
 		onPromoteFocus:
 			focusFrame.role === "companion"
@@ -126,6 +134,190 @@ function getFocusCanvas(viewportWidth, viewportHeight) {
 	}
 }
 
+function getStackedRightRailCapacity({ viewportWidth, viewportHeight }) {
+	const canvas = getFocusCanvas(viewportWidth, viewportHeight)
+	const maxRailSlotsByHeight = Math.max(
+		1,
+		Math.floor(
+			(canvas.height + FOCUS_OVERLAY_GAP_PX) /
+				(FOCUS_STACKED_MIN_COMPANION_HEIGHT_PX + FOCUS_OVERLAY_GAP_PX),
+		),
+	)
+
+	return clamp(maxRailSlotsByHeight, 1, FOCUS_MAX_STREAMS - 1)
+}
+
+function buildHeroFocusSlotStyles({
+	slotCount,
+	viewportWidth,
+	viewportHeight,
+}) {
+	const canvas = getFocusCanvas(viewportWidth, viewportHeight)
+	const { left, top, width, height } = canvas
+
+	if (slotCount === 1) {
+		return [{ left, top, width, height }]
+	}
+
+	const railWidth = clamp(width * 0.28, 236, 340)
+	const primaryWidth = Math.max(320, width - railWidth - FOCUS_OVERLAY_GAP_PX)
+	const companionLeft = left + primaryWidth + FOCUS_OVERLAY_GAP_PX
+
+	if (slotCount === 2) {
+		return [
+			{
+				left,
+				top,
+				width: primaryWidth,
+				height,
+			},
+			{
+				left: companionLeft,
+				top,
+				width: width - primaryWidth - FOCUS_OVERLAY_GAP_PX,
+				height,
+			},
+		]
+	}
+
+	if (slotCount === 3) {
+		const companionWidth = width - primaryWidth - FOCUS_OVERLAY_GAP_PX
+		const companionHeight = (height - FOCUS_OVERLAY_GAP_PX) / 2
+
+		return [
+			{
+				left,
+				top,
+				width: primaryWidth,
+				height,
+			},
+			{
+				left: companionLeft,
+				top,
+				width: companionWidth,
+				height: companionHeight,
+			},
+			{
+				left: companionLeft,
+				top: top + companionHeight + FOCUS_OVERLAY_GAP_PX,
+				width: companionWidth,
+				height: companionHeight,
+			},
+		]
+	}
+
+	const bottomCount = slotCount - 3
+	const bottomHeight = clamp(height * 0.24, 148, 210)
+	const topHeight = height - bottomHeight - FOCUS_OVERLAY_GAP_PX
+	const companionWidth = width - primaryWidth - FOCUS_OVERLAY_GAP_PX
+	const companionHeight = (topHeight - FOCUS_OVERLAY_GAP_PX) / 2
+	const bottomWidth =
+		bottomCount === 1
+			? width
+			: (width - FOCUS_OVERLAY_GAP_PX * (bottomCount - 1)) / bottomCount
+
+	return [
+		{
+			left,
+			top,
+			width: primaryWidth,
+			height: topHeight,
+		},
+		{
+			left: companionLeft,
+			top,
+			width: companionWidth,
+			height: companionHeight,
+		},
+		{
+			left: companionLeft,
+			top: top + companionHeight + FOCUS_OVERLAY_GAP_PX,
+			width: companionWidth,
+			height: companionHeight,
+		},
+		...Array.from({ length: bottomCount }, (_, index) => ({
+			left: left + index * (bottomWidth + FOCUS_OVERLAY_GAP_PX),
+			top: top + topHeight + FOCUS_OVERLAY_GAP_PX,
+			width: bottomWidth,
+			height: bottomHeight,
+		})),
+	]
+}
+
+function buildStackedFocusSlotStyles({
+	slotCount,
+	viewportWidth,
+	viewportHeight,
+}) {
+	const canvas = getFocusCanvas(viewportWidth, viewportHeight)
+	const { left, top, width, height } = canvas
+
+	if (slotCount === 1) {
+		return [{ left, top, width, height }]
+	}
+
+	const railWidth = clamp(width * 0.26, 220, 320)
+	const primaryWidth = Math.max(320, width - railWidth - FOCUS_OVERLAY_GAP_PX)
+	const rightRailMaxSlots = getStackedRightRailCapacity({
+		viewportWidth,
+		viewportHeight,
+	})
+	const rightRailCount = Math.min(rightRailMaxSlots, slotCount - 1)
+	const bottomCount = Math.max(0, slotCount - 1 - rightRailCount)
+	const idealBottomHeight = bottomCount > 0 ? clamp(height * 0.23, 142, 188) : 0
+	const maxBottomWidth =
+		bottomCount <= 1
+			? primaryWidth
+			: (primaryWidth - FOCUS_OVERLAY_GAP_PX * (bottomCount - 1)) / bottomCount
+	const bottomWidth =
+		bottomCount > 0 ? Math.min(maxBottomWidth, idealBottomHeight * (16 / 9)) : 0
+	const bottomHeight = bottomWidth > 0 ? bottomWidth * (9 / 16) : 0
+	const topHeight =
+		bottomCount > 0 ? height - bottomHeight - FOCUS_OVERLAY_GAP_PX : height
+	const companionLeft = left + primaryWidth + FOCUS_OVERLAY_GAP_PX
+	const companionWidth = width - primaryWidth - FOCUS_OVERLAY_GAP_PX
+	const railSlotHeight =
+		rightRailCount > 1
+			? (topHeight - FOCUS_OVERLAY_GAP_PX) / rightRailCount
+			: topHeight
+	const idealCompanionHeight = companionWidth * (9 / 16)
+	const companionHeight = Math.min(railSlotHeight, idealCompanionHeight)
+	const railContentHeight =
+		rightRailCount > 0
+			? rightRailCount * companionHeight +
+				FOCUS_OVERLAY_GAP_PX * Math.max(0, rightRailCount - 1)
+			: 0
+	const railTop = top + Math.max(0, (topHeight - railContentHeight) / 2)
+	const bottomRowWidth =
+		bottomCount > 0
+			? bottomCount * bottomWidth +
+				FOCUS_OVERLAY_GAP_PX * Math.max(0, bottomCount - 1)
+			: 0
+	const bottomLeft =
+		bottomCount > 0 ? left + (primaryWidth - bottomRowWidth) / 2 : left
+
+	return [
+		{
+			left,
+			top,
+			width: primaryWidth,
+			height: topHeight,
+		},
+		...Array.from({ length: rightRailCount }, (_, index) => ({
+			left: companionLeft,
+			top: railTop + index * (companionHeight + FOCUS_OVERLAY_GAP_PX),
+			width: companionWidth,
+			height: companionHeight,
+		})),
+		...Array.from({ length: bottomCount }, (_, index) => ({
+			left: bottomLeft + index * (bottomWidth + FOCUS_OVERLAY_GAP_PX),
+			top: top + topHeight + FOCUS_OVERLAY_GAP_PX,
+			width: bottomWidth,
+			height: bottomHeight,
+		})),
+	]
+}
+
 function buildFocusSlotStyles({
 	focusLayout,
 	slotCount,
@@ -154,50 +346,101 @@ function buildFocusSlotStyles({
 		}))
 	}
 
-	const railWidth = clamp(width * 0.28, 236, 340)
-	const primaryWidth = Math.max(320, width - railWidth - FOCUS_OVERLAY_GAP_PX)
-	const companionLeft = left + primaryWidth + FOCUS_OVERLAY_GAP_PX
-
-	if (slotCount === 2) {
-		return [
-			{
-				left,
-				top,
-				width: primaryWidth,
-				height,
-			},
-			{
-				left: companionLeft,
-				top,
-				width: width - primaryWidth - FOCUS_OVERLAY_GAP_PX,
-				height,
-			},
-		]
+	if (focusLayout === "stacked") {
+		return buildStackedFocusSlotStyles({
+			slotCount,
+			viewportWidth,
+			viewportHeight,
+		})
 	}
 
-	const companionWidth = width - primaryWidth - FOCUS_OVERLAY_GAP_PX
-	const companionHeight = (height - FOCUS_OVERLAY_GAP_PX) / 2
+	return buildHeroFocusSlotStyles({
+		slotCount,
+		viewportWidth,
+		viewportHeight,
+	})
+}
 
-	return [
-		{
-			left,
-			top,
-			width: primaryWidth,
-			height,
+function buildSingleFocusLayout({ viewportWidth, viewportHeight }) {
+	const baseFrame =
+		buildHeroFocusSlotStyles({
+			slotCount: 1,
+			viewportWidth,
+			viewportHeight,
+		})[0] ?? null
+
+	if (!baseFrame) {
+		return null
+	}
+
+	const shouldShowChatRail =
+		viewportWidth >= PREVIEW_CHAT_MIN_VIEWPORT_WIDTH_PX &&
+		baseFrame.width - PREVIEW_CHAT_PANEL_WIDTH_PX - PREVIEW_CHAT_PANEL_GAP_PX >=
+			PREVIEW_CHAT_MIN_CONTENT_WIDTH_PX
+
+	if (!shouldShowChatRail) {
+		return {
+			videoFrame: baseFrame,
+			chatFrame: null,
+		}
+	}
+
+	const chatWidth = Math.min(
+		PREVIEW_CHAT_PANEL_WIDTH_PX,
+		Math.max(FOCUS_CHAT_DRAWER_MIN_WIDTH_PX, baseFrame.width * 0.32),
+	)
+	const videoWidth = baseFrame.width - chatWidth - PREVIEW_CHAT_PANEL_GAP_PX
+
+	return {
+		videoFrame: {
+			...baseFrame,
+			width: videoWidth,
 		},
-		{
-			left: companionLeft,
-			top,
-			width: companionWidth,
-			height: companionHeight,
+		chatFrame: {
+			left: baseFrame.left + videoWidth + PREVIEW_CHAT_PANEL_GAP_PX,
+			top: baseFrame.top,
+			width: chatWidth,
+			height: baseFrame.height,
 		},
-		{
-			left: companionLeft,
-			top: top + companionHeight + FOCUS_OVERLAY_GAP_PX,
-			width: companionWidth,
-			height: companionHeight,
-		},
-	]
+	}
+}
+
+function getStackedFocusSlotCount({
+	focusedCount,
+	availableCount,
+	overflowEnabled = false,
+	rightRailMaxSlots,
+}) {
+	if (focusedCount <= 0) {
+		return 0
+	}
+
+	const companionCount = Math.max(0, focusedCount - 1)
+	const rightCompanionCount = Math.min(rightRailMaxSlots, companionCount)
+	const bottomCompanionCount = Math.max(0, companionCount - rightCompanionCount)
+	const rightOpenSlotCount =
+		companionCount < rightRailMaxSlots
+			? Math.min(rightRailMaxSlots - companionCount, availableCount)
+			: 0
+	const remainingAvailableCount = Math.max(
+		0,
+		availableCount - rightOpenSlotCount,
+	)
+	const bottomOpenSlotCount =
+		companionCount >= rightRailMaxSlots &&
+		focusedCount < FOCUS_MAX_STREAMS &&
+		(bottomCompanionCount > 0 || overflowEnabled) &&
+		remainingAvailableCount > 0
+			? 1
+			: 0
+
+	return (
+		1 +
+		rightCompanionCount +
+		bottomCompanionCount +
+		rightOpenSlotCount +
+		bottomOpenSlotCount
+	)
 }
 
 function getFocusChatDrawerRect(viewportWidth, viewportHeight) {
@@ -269,6 +512,50 @@ function FocusChatResizeHandle({
 function FocusAddSlot({ style, availableStreams, onAddCompanion }) {
 	const [menuOpen, setMenuOpen] = useState(false)
 	const slotRef = useRef(null)
+	const menuRef = useRef(null)
+	const buttonRef = useRef(null)
+	const [menuStyle, setMenuStyle] = useState(null)
+
+	const updateMenuPosition = useCallback(() => {
+		const buttonNode = buttonRef.current
+		if (!buttonNode) {
+			return
+		}
+
+		const rect = buttonNode.getBoundingClientRect()
+		const viewportPadding = 16
+		const menuWidth = Math.min(
+			Math.max(rect.width, FOCUS_ADD_MENU_MIN_WIDTH_PX),
+			FOCUS_ADD_MENU_MAX_WIDTH_PX,
+			window.innerWidth - viewportPadding * 2,
+		)
+		const maxHeight = Math.min(
+			FOCUS_ADD_MENU_MAX_HEIGHT_PX,
+			window.innerHeight - viewportPadding * 2,
+		)
+		const placeAbove =
+			rect.bottom + FOCUS_ADD_MENU_GAP_PX + maxHeight >
+				window.innerHeight - viewportPadding &&
+			rect.top - FOCUS_ADD_MENU_GAP_PX - maxHeight >= viewportPadding
+		const left = clamp(
+			rect.left,
+			viewportPadding,
+			window.innerWidth - menuWidth - viewportPadding,
+		)
+		const top = placeAbove
+			? Math.max(viewportPadding, rect.top - maxHeight - FOCUS_ADD_MENU_GAP_PX)
+			: Math.min(
+					rect.bottom + FOCUS_ADD_MENU_GAP_PX,
+					window.innerHeight - maxHeight - viewportPadding,
+				)
+
+		setMenuStyle({
+			left,
+			top,
+			width: menuWidth,
+			maxHeight,
+		})
+	}, [])
 
 	useEffect(() => {
 		if (!menuOpen) {
@@ -276,46 +563,82 @@ function FocusAddSlot({ style, availableStreams, onAddCompanion }) {
 		}
 
 		const handlePointerDown = (event) => {
-			if (slotRef.current?.contains(event.target)) {
+			if (
+				slotRef.current?.contains(event.target) ||
+				menuRef.current?.contains(event.target)
+			) {
 				return
 			}
 
 			setMenuOpen(false)
 		}
 
+		updateMenuPosition()
 		document.addEventListener("pointerdown", handlePointerDown)
+		window.addEventListener("resize", updateMenuPosition)
+		window.addEventListener("scroll", updateMenuPosition, true)
+
 		return () => {
 			document.removeEventListener("pointerdown", handlePointerDown)
+			window.removeEventListener("resize", updateMenuPosition)
+			window.removeEventListener("scroll", updateMenuPosition, true)
 		}
-	}, [menuOpen])
+	}, [menuOpen, updateMenuPosition])
 
 	if (!availableStreams.length) {
 		return null
 	}
 
 	return (
-		<div className="fixed z-[72]" style={style}>
-			<div
-				ref={slotRef}
-				className="flex h-full min-h-0 flex-col justify-center rounded-[1.7rem] border border-dashed border-cyan-300/28 bg-slate-950/26 p-4 backdrop-blur-sm"
-			>
-				<div className="text-[0.7rem] font-bold uppercase tracking-[0.16em] text-cyan-100/70">
-					Open Slot
-				</div>
-				<button
-					type="button"
-					onClick={() => setMenuOpen((open) => !open)}
-					className="mt-3 inline-flex items-center justify-center gap-2 rounded-[1.2rem] border border-cyan-400/18 bg-white/8 px-4 py-3 text-sm font-semibold text-white transition-colors cursor-pointer hover:bg-white/12"
+		<>
+			<div className="fixed z-[72]" style={style}>
+				<div
+					ref={slotRef}
+					className="flex h-full min-h-0 flex-col justify-center rounded-[1.7rem] border border-dashed border-cyan-300/28 bg-slate-950/26 p-4 backdrop-blur-sm"
 				>
-					<i className="fa-solid fa-plus" />
-					Add Companion
-				</button>
+					<div className="text-[0.7rem] font-bold uppercase tracking-[0.16em] text-cyan-100/70">
+						Open Slot
+					</div>
+					<button
+						ref={buttonRef}
+						type="button"
+						onClick={() => setMenuOpen((open) => !open)}
+						className="mt-3 inline-flex items-center justify-center gap-2 rounded-[1.2rem] border border-cyan-400/18 bg-white/8 px-4 py-3 text-sm font-semibold text-white transition-colors cursor-pointer hover:bg-white/12"
+					>
+						<i className="fa-solid fa-plus" />
+						Add Companion
+					</button>
+				</div>
+			</div>
 
-				{menuOpen && (
-					<div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-[1rem] border border-cyan-400/14 bg-slate-950/78 p-2">
-						<div className="mb-2 px-2 text-[0.66rem] font-bold uppercase tracking-[0.16em] text-slate-300/58">
-							Current project streams
+			{menuOpen && menuStyle && (
+				<div
+					ref={menuRef}
+					className="fixed z-[78] overflow-hidden rounded-[1.25rem] border border-cyan-400/18 bg-[linear-gradient(180deg,rgba(14,22,43,0.97),rgba(8,12,28,0.99))] shadow-[0_24px_70px_rgba(2,6,23,0.56)]"
+					style={menuStyle}
+				>
+					<div className="flex items-center justify-between gap-3 border-b border-cyan-400/12 px-4 py-3">
+						<div>
+							<div className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-cyan-100/72">
+								Project Streams
+							</div>
+							<div className="mt-1 text-sm font-semibold text-white">
+								Add a companion to cinema mode
+							</div>
 						</div>
+						<button
+							type="button"
+							onClick={() => setMenuOpen(false)}
+							className="rounded-full border-0 bg-white/8 px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.12em] text-white transition-colors cursor-pointer hover:bg-white/12"
+						>
+							Close
+						</button>
+					</div>
+
+					<div
+						className="overflow-y-auto p-2"
+						style={{ maxHeight: menuStyle.maxHeight - 74 }}
+					>
 						<div className="space-y-1">
 							{availableStreams.map((stream) => (
 								<button
@@ -325,7 +648,7 @@ function FocusAddSlot({ style, availableStreams, onAddCompanion }) {
 										onAddCompanion(stream.id)
 										setMenuOpen(false)
 									}}
-									className="flex w-full items-center justify-between gap-3 rounded-xl border-0 bg-white/6 px-3 py-2 text-left text-sm text-white transition-colors cursor-pointer hover:bg-white/10"
+									className="flex w-full items-center justify-between gap-3 rounded-xl border border-transparent bg-white/6 px-3 py-2.5 text-left text-sm text-white transition-colors cursor-pointer hover:border-cyan-400/14 hover:bg-white/10"
 								>
 									<span className="truncate">{stream.title}</span>
 									<span className="shrink-0 text-[0.64rem] font-bold uppercase tracking-[0.14em] text-slate-300/60">
@@ -335,9 +658,9 @@ function FocusAddSlot({ style, availableStreams, onAddCompanion }) {
 							))}
 						</div>
 					</div>
-				)}
-			</div>
-		</div>
+				</div>
+			)}
+		</>
 	)
 }
 
@@ -361,6 +684,7 @@ function FocusOverlayChrome({
 	showChatControls = true,
 	showEmptySlots = true,
 	badgeLabel = "Cinema Mode",
+	secondaryAction = null,
 	primaryAction = null,
 }) {
 	const drawerRect = useMemo(
@@ -547,20 +871,32 @@ function FocusOverlayChrome({
 				</div>
 
 				<div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-					{showLayoutControls && hasMultiFocusExperience && (
+					{showLayoutControls && (
 						<div className="inline-flex items-center gap-1 rounded-full bg-slate-950/78 p-1 shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
 							<button
 								type="button"
-								onClick={() => onSetFocusLayout("hero")}
+								onClick={() => onSetFocusLayout("single")}
 								className={`rounded-full px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
-									focusLayout === "hero"
+									focusLayout === "single"
 										? "bg-cyan-400/18 text-cyan-50"
 										: "text-slate-200/78 hover:bg-white/8"
 								}`}
 							>
-								Hero
+								Single
 							</button>
 							<button
+								type="button"
+								onClick={() => onSetFocusLayout("stacked")}
+								className={`rounded-full px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+									focusLayout === "stacked"
+										? "bg-cyan-400/18 text-cyan-50"
+										: "text-slate-200/78 hover:bg-white/8"
+								}`}
+							>
+								Stacked
+							</button>
+							{/* TODO: Implement Equal in phase 2 to cleanup */}
+							{/* <button
 								type="button"
 								onClick={() => onSetFocusLayout("equal")}
 								className={`rounded-full px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
@@ -570,7 +906,7 @@ function FocusOverlayChrome({
 								}`}
 							>
 								Equal
-							</button>
+							</button> */}
 						</div>
 					)}
 
@@ -585,6 +921,21 @@ function FocusOverlayChrome({
 							}`}
 						>
 							{focusChatOpen ? "Hide Chat" : "Open Chat"}
+						</button>
+					)}
+
+					{secondaryAction && (
+						<button
+							type="button"
+							onClick={secondaryAction.onClick}
+							disabled={secondaryAction.disabled}
+							className={`rounded-full px-4 py-2 text-[0.68rem] font-bold uppercase tracking-[0.14em] shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur transition-colors ${
+								secondaryAction.disabled
+									? "cursor-not-allowed bg-white/8 text-slate-400"
+									: "cursor-pointer bg-white/8 text-slate-100 hover:bg-white/12"
+							}`}
+						>
+							{secondaryAction.label}
 						</button>
 					)}
 
@@ -613,12 +964,14 @@ function FocusOverlayChrome({
 				</div>
 			</div>
 
-			{showEmptySlots && !hasMultiFocusExperience && hiddenCompanionCount > 0 && (
-				<div className="pointer-events-none fixed top-24 left-1/2 z-[80] -translate-x-1/2 rounded-full bg-slate-950/78 px-4 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-100 shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
-					Wider viewport restores {hiddenCompanionCount} companion
-					{hiddenCompanionCount > 1 ? "s" : ""}
-				</div>
-			)}
+			{showEmptySlots &&
+				!hasMultiFocusExperience &&
+				hiddenCompanionCount > 0 && (
+					<div className="pointer-events-none fixed top-24 left-1/2 z-[80] -translate-x-1/2 rounded-full bg-slate-950/78 px-4 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-100 shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
+						Wider viewport restores {hiddenCompanionCount} companion
+						{hiddenCompanionCount > 1 ? "s" : ""}
+					</div>
+				)}
 
 			{showEmptySlots &&
 				hasMultiFocusExperience &&
@@ -812,8 +1165,7 @@ function PreviewOverlayCard({
 }) {
 	const previewLayout = useMemo(() => {
 		const baseFrame =
-			buildFocusSlotStyles({
-				focusLayout: "hero",
+			buildHeroFocusSlotStyles({
 				slotCount: 1,
 				viewportWidth,
 				viewportHeight,
@@ -826,7 +1178,9 @@ function PreviewOverlayCard({
 		const shouldShowChat =
 			isStreamChatCapable(stream) &&
 			viewportWidth >= PREVIEW_CHAT_MIN_VIEWPORT_WIDTH_PX &&
-			baseFrame.width - PREVIEW_CHAT_PANEL_WIDTH_PX - PREVIEW_CHAT_PANEL_GAP_PX >=
+			baseFrame.width -
+				PREVIEW_CHAT_PANEL_WIDTH_PX -
+				PREVIEW_CHAT_PANEL_GAP_PX >=
 				PREVIEW_CHAT_MIN_CONTENT_WIDTH_PX
 
 		if (!shouldShowChat) {
@@ -838,10 +1192,7 @@ function PreviewOverlayCard({
 
 		const chatWidth = Math.min(
 			PREVIEW_CHAT_PANEL_WIDTH_PX,
-			Math.max(
-				FOCUS_CHAT_DRAWER_MIN_WIDTH_PX,
-				baseFrame.width * 0.32,
-			),
+			Math.max(FOCUS_CHAT_DRAWER_MIN_WIDTH_PX, baseFrame.width * 0.32),
 		)
 		const videoWidth = baseFrame.width - chatWidth - PREVIEW_CHAT_PANEL_GAP_PX
 
@@ -908,6 +1259,30 @@ function PreviewOverlayCard({
 				</div>
 			)}
 		</>
+	)
+}
+
+function SingleFocusChatRail({ stream, frame }) {
+	if (!stream || !frame) {
+		return null
+	}
+
+	return (
+		<div
+			className="pointer-events-auto fixed z-[72]"
+			style={{
+				left: frame.left,
+				top: frame.top,
+				width: frame.width,
+				height: frame.height,
+			}}
+		>
+			<StreamChatSidebar
+				streams={[stream]}
+				activeStreamId={stream.id}
+				variant="overlay"
+			/>
+		</div>
 	)
 }
 
@@ -1326,7 +1701,7 @@ export default function StreamGrid({
 	})
 	const streamVolumes = useWallStore(useShallow((state) => state.streamVolumes))
 	const focusedStreamIds = focusState?.focusedStreamIds ?? []
-	const focusLayout = focusState?.focusLayout ?? "hero"
+	const focusLayout = focusState?.focusLayout ?? "single"
 	const focusChatOpen = focusState?.focusChatOpen ?? false
 	const focusChatStreamId = focusState?.focusChatStreamId ?? null
 	const [focusPlaybackToken, setFocusPlaybackToken] = useState(0)
@@ -1335,6 +1710,7 @@ export default function StreamGrid({
 	const [pendingStreamIds, setPendingStreamIds] = useState(
 		() => new Set(streams.map((stream) => stream.id)),
 	)
+	const [stackedOverflowEnabled, setStackedOverflowEnabled] = useState(false)
 	const primaryFocusedStreamId = focusedStreamIds[0] ?? null
 	const primaryFocusedStreamIdRef = useRef(primaryFocusedStreamId)
 	const primaryFocusTransitionKeyRef = useRef(primaryFocusTransitionKey)
@@ -1345,8 +1721,7 @@ export default function StreamGrid({
 		() =>
 			streams
 				.map(
-					(stream) =>
-						`${stream.id}:${stream.platform}:${stream.channelName}`,
+					(stream) => `${stream.id}:${stream.platform}:${stream.channelName}`,
 				)
 				.sort()
 				.join("|"),
@@ -1440,6 +1815,12 @@ export default function StreamGrid({
 		}
 	}, [pendingStreamIds])
 
+	useEffect(() => {
+		if (focusedStreamIds.length === 0) {
+			setStackedOverflowEnabled(false)
+		}
+	}, [focusedStreamIds.length])
+
 	const handlePlayerReady = useCallback((streamId, readyLoadSessionKey) => {
 		if (readyLoadSessionKey !== activeLoadSessionKeyRef.current) {
 			return
@@ -1460,12 +1841,31 @@ export default function StreamGrid({
 	const hasActiveFocus = focusedStreamIds.length > 0
 	const hasPreviewOverlay = Boolean(previewStream)
 	const hasOverlayPresentation = hasActiveFocus || hasPreviewOverlay
+	const isSingleFocusLayout = focusLayout === "single"
+	const isStackedFocusLayout = focusLayout === "stacked"
 	const hasMultiFocusExperience =
 		containerSize.viewportWidth >= FOCUS_WIDE_MIN_WIDTH_PX &&
 		containerSize.viewportHeight >= FOCUS_WIDE_MIN_HEIGHT_PX
-	const visibleFocusedStreamIds = hasMultiFocusExperience
-		? focusedStreamIds
-		: focusedStreamIds.slice(0, 1)
+	const singleFocusLayout = useMemo(
+		() =>
+			isSingleFocusLayout && hasActiveFocus
+				? buildSingleFocusLayout({
+						viewportWidth: containerSize.viewportWidth,
+						viewportHeight: containerSize.viewportHeight,
+					})
+				: null,
+		[
+			containerSize.viewportHeight,
+			containerSize.viewportWidth,
+			hasActiveFocus,
+			isSingleFocusLayout,
+		],
+	)
+	const hasSingleFocusRail = Boolean(singleFocusLayout?.chatFrame)
+	const visibleFocusedStreamIds =
+		hasMultiFocusExperience && !isSingleFocusLayout
+			? focusedStreamIds
+			: focusedStreamIds.slice(0, 1)
 	const hiddenCompanionCount = Math.max(
 		0,
 		focusedStreamIds.length - visibleFocusedStreamIds.length,
@@ -1474,62 +1874,146 @@ export default function StreamGrid({
 		() => new Set(focusedStreamIds),
 		[focusedStreamIds],
 	)
+	const primaryFocusedStream = useMemo(
+		() =>
+			streams.find((stream) => stream.id === primaryFocusedStreamId) ?? null,
+		[primaryFocusedStreamId, streams],
+	)
 	const availableCompanionStreams = useMemo(
 		() =>
-			hasMultiFocusExperience
+			hasMultiFocusExperience && !isSingleFocusLayout
 				? streams.filter((stream) => !focusedStreamIdSet.has(stream.id))
 				: [],
-		[focusedStreamIdSet, hasMultiFocusExperience, streams],
+		[focusedStreamIdSet, hasMultiFocusExperience, isSingleFocusLayout, streams],
+	)
+	const stackedRightRailMaxSlots = useMemo(
+		() =>
+			getStackedRightRailCapacity({
+				viewportWidth: containerSize.viewportWidth,
+				viewportHeight: containerSize.viewportHeight,
+			}),
+		[containerSize.viewportHeight, containerSize.viewportWidth],
+	)
+	const stackedFocusedCompanionCount = Math.max(
+		0,
+		visibleFocusedStreamIds.length - 1,
+	)
+	const stackedBottomCompanionCount = Math.max(
+		0,
+		stackedFocusedCompanionCount - stackedRightRailMaxSlots,
+	)
+	const canRevealStackedOverflow =
+		hasMultiFocusExperience &&
+		isStackedFocusLayout &&
+		stackedFocusedCompanionCount >= stackedRightRailMaxSlots &&
+		stackedBottomCompanionCount === 0 &&
+		availableCompanionStreams.length > 0 &&
+		visibleFocusedStreamIds.length < FOCUS_MAX_STREAMS &&
+		!stackedOverflowEnabled
+	const stackedFocusSlotCount = useMemo(
+		() =>
+			getStackedFocusSlotCount({
+				focusedCount: visibleFocusedStreamIds.length,
+				availableCount: availableCompanionStreams.length,
+				overflowEnabled: stackedOverflowEnabled,
+				rightRailMaxSlots: stackedRightRailMaxSlots,
+			}),
+		[
+			availableCompanionStreams.length,
+			stackedRightRailMaxSlots,
+			stackedOverflowEnabled,
+			visibleFocusedStreamIds.length,
+		],
 	)
 	const focusSlotCount =
 		visibleFocusedStreamIds.length === 0
 			? 0
-			: hasMultiFocusExperience
-				? Math.min(
-						FOCUS_MAX_STREAMS,
-						visibleFocusedStreamIds.length + availableCompanionStreams.length,
-					)
-				: 1
-	const focusSlotStyles = useMemo(
-		() =>
-			buildFocusSlotStyles({
-				focusLayout,
-				slotCount: focusSlotCount,
-				viewportWidth: containerSize.viewportWidth,
-				viewportHeight: containerSize.viewportHeight,
-			}),
-		[
-			containerSize.viewportHeight,
-			containerSize.viewportWidth,
+			: isSingleFocusLayout
+				? 1
+				: isStackedFocusLayout
+					? stackedFocusSlotCount
+					: hasMultiFocusExperience
+						? Math.min(
+								FOCUS_MAX_STREAMS,
+								visibleFocusedStreamIds.length +
+									availableCompanionStreams.length,
+							)
+						: 1
+	const focusSlotStyles = useMemo(() => {
+		if (focusSlotCount === 0) {
+			return []
+		}
+
+		if (isSingleFocusLayout) {
+			return singleFocusLayout?.videoFrame ? [singleFocusLayout.videoFrame] : []
+		}
+
+		return buildFocusSlotStyles({
 			focusLayout,
-			focusSlotCount,
-		],
-	)
+			slotCount: focusSlotCount,
+			viewportWidth: containerSize.viewportWidth,
+			viewportHeight: containerSize.viewportHeight,
+		})
+	}, [
+		containerSize.viewportHeight,
+		containerSize.viewportWidth,
+		focusLayout,
+		focusSlotCount,
+		isSingleFocusLayout,
+		isStackedFocusLayout,
+		singleFocusLayout,
+	])
 	const focusFramesByStreamId = useMemo(
 		() =>
 			Object.fromEntries(
-				visibleFocusedStreamIds.map((streamId, index) => [
-					streamId,
-					{
-						...focusSlotStyles[index],
-						role: index === 0 ? "primary" : "companion",
-					},
-				]),
+				visibleFocusedStreamIds
+					.filter((_, index) => Boolean(focusSlotStyles[index]))
+					.map((streamId, index) => [
+						streamId,
+						{
+							...focusSlotStyles[index],
+							role: index === 0 ? "primary" : "companion",
+							placement:
+								index === 0
+									? "primary"
+									: isStackedFocusLayout && index > stackedRightRailMaxSlots
+										? "bottom"
+										: "rail",
+						},
+					]),
 			),
-		[focusSlotStyles, visibleFocusedStreamIds],
+		[
+			focusSlotStyles,
+			isStackedFocusLayout,
+			stackedRightRailMaxSlots,
+			visibleFocusedStreamIds,
+		],
 	)
 	const emptySlotStyles = useMemo(
-		() => focusSlotStyles.slice(visibleFocusedStreamIds.length),
-		[focusSlotStyles, visibleFocusedStreamIds.length],
+		() =>
+			isSingleFocusLayout
+				? []
+				: focusSlotStyles.slice(visibleFocusedStreamIds.length),
+		[focusSlotStyles, isSingleFocusLayout, visibleFocusedStreamIds.length],
+	)
+	const focusedChatStreamIds = isSingleFocusLayout
+		? visibleFocusedStreamIds.slice(0, 1)
+		: focusedStreamIds
+	const focusedChatStreamIdSet = useMemo(
+		() => new Set(focusedChatStreamIds),
+		[focusedChatStreamIds],
 	)
 	const focusedChatStreams = useMemo(
 		() =>
 			streams.filter(
 				(stream) =>
-					focusedStreamIdSet.has(stream.id) && isStreamChatCapable(stream),
+					focusedChatStreamIdSet.has(stream.id) && isStreamChatCapable(stream),
 			),
-		[focusedStreamIdSet, streams],
+		[focusedChatStreamIdSet, streams],
 	)
+	const effectiveFocusChatStreamId = isSingleFocusLayout
+		? primaryFocusedStreamId
+		: focusChatStreamId
 	const visibleFocusFramesByStreamId = hasPreviewOverlay
 		? {}
 		: focusFramesByStreamId
@@ -1551,7 +2035,7 @@ export default function StreamGrid({
 					<FocusOverlayChrome
 						hasMultiFocusExperience={false}
 						hiddenCompanionCount={0}
-						focusLayout="hero"
+						focusLayout="stacked"
 						focusChatOpen={false}
 						focusChatStreamId={null}
 						focusedChatStreams={[]}
@@ -1585,23 +2069,42 @@ export default function StreamGrid({
 			)}
 
 			{!isMatrixMode && !hasPreviewOverlay && hasActiveFocus && (
-				<FocusOverlayChrome
-					hasMultiFocusExperience={hasMultiFocusExperience}
-					hiddenCompanionCount={hiddenCompanionCount}
-					focusLayout={focusLayout}
-					focusChatOpen={focusChatOpen}
-					focusChatStreamId={focusChatStreamId}
-					focusedChatStreams={focusedChatStreams}
-					emptySlotStyles={emptySlotStyles}
-					availableCompanionStreams={availableCompanionStreams}
-					viewportWidth={containerSize.viewportWidth}
-					viewportHeight={containerSize.viewportHeight}
-					onAddFocusCompanion={onAddFocusCompanion}
-					onSetFocusLayout={onSetFocusLayout}
-					onToggleFocusChat={onToggleFocusChat}
-					onSetFocusChatStream={onSetFocusChatStream}
-					onClearFocus={onClearFocus}
-				/>
+				<>
+					<FocusOverlayChrome
+						hasMultiFocusExperience={hasMultiFocusExperience}
+						hiddenCompanionCount={hiddenCompanionCount}
+						focusLayout={focusLayout}
+						focusChatOpen={focusChatOpen}
+						focusChatStreamId={effectiveFocusChatStreamId}
+						focusedChatStreams={focusedChatStreams}
+						emptySlotStyles={emptySlotStyles}
+						availableCompanionStreams={availableCompanionStreams}
+						viewportWidth={containerSize.viewportWidth}
+						viewportHeight={containerSize.viewportHeight}
+						onAddFocusCompanion={onAddFocusCompanion}
+						onSetFocusLayout={onSetFocusLayout}
+						onToggleFocusChat={onToggleFocusChat}
+						onSetFocusChatStream={onSetFocusChatStream}
+						onClearFocus={onClearFocus}
+						showChatControls={!hasSingleFocusRail}
+						showEmptySlots={!isSingleFocusLayout}
+						secondaryAction={
+							canRevealStackedOverflow
+								? {
+										label: "Add More",
+										onClick: () => setStackedOverflowEnabled(true),
+										disabled: false,
+									}
+								: null
+						}
+					/>
+					{hasSingleFocusRail && (
+						<SingleFocusChatRail
+							stream={primaryFocusedStream}
+							frame={singleFocusLayout?.chatFrame ?? null}
+						/>
+					)}
+				</>
 			)}
 
 			{isMatrixMode ? (

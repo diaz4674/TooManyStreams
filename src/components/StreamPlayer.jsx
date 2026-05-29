@@ -10,6 +10,9 @@ const TWITCH_PLAYBACK_RECOVERY_WINDOW_MS = 1600
 const TWITCH_PLAYBACK_RETRY_DELAY_MS = 250
 const TWITCH_TAB_RESUME_RETRY_DELAYS_MS = [0, 320, 900, 1700]
 const TWITCH_TAB_RESUME_REBUILD_FALLBACK_DELAY_MS = 2800
+const YOUTUBE_READY_TIMEOUT_MS = 7000
+const YOUTUBE_RECOVERY_RETRY_DELAYS_MS = [0, 320, 900, 1700]
+const YOUTUBE_REBUILD_FALLBACK_DELAY_MS = 2800
 
 function loadTwitchSdk() {
 	if (window.Twitch?.Player) {
@@ -103,11 +106,15 @@ function getCoverFrameStyle(containerSize, cropToFill) {
 	if (!cropToFill || containerSize.width <= 0 || containerSize.height <= 0) {
 		return {
 			position: "absolute",
-			inset: "0",
+			top: "0",
+			right: "0",
+			bottom: "0",
+			left: "0",
 			width: "100%",
 			height: "100%",
 			border: "0",
 			display: "block",
+			transform: "none",
 		}
 	}
 
@@ -592,11 +599,20 @@ function YouTubeEmbed({
 	onReady,
 	loadSessionKey,
 }) {
-	const iframeId = `youtube-player-${stream.id}`
+	const [playerBuildKey, setPlayerBuildKey] = useState(0)
+	const [sdkFailed, setSdkFailed] = useState(false)
+	const iframeId = `youtube-player-${stream.id}-${playerBuildKey}`
+	const mountRef = useRef(null)
 	const playerRef = useRef(null)
 	const readyRef = useRef(false)
 	const readySignalSentRef = useRef(false)
-	const skipInitialAudioSyncRef = useRef(true)
+	const readyTimeoutRef = useRef(null)
+	const recoveryTimeoutsRef = useRef([])
+	const recoveryRebuildTimeoutRef = useRef(null)
+	const recoveryAttemptIdRef = useRef(0)
+	const userVolumeIntentRef = useRef(false)
+	const lastVolumeRef = useRef(volume)
+	const lastPlaybackTokenRef = useRef(playbackToken)
 	const settingsRef = useRef({
 		frameStyle: null,
 		muted,
@@ -620,8 +636,22 @@ function YouTubeEmbed({
 
 	useEffect(() => {
 		readySignalSentRef.current = false
-		skipInitialAudioSyncRef.current = true
+		setSdkFailed(false)
+		setPlayerBuildKey(0)
+		userVolumeIntentRef.current = false
+		lastVolumeRef.current = volume
+		lastPlaybackTokenRef.current = playbackToken
 	}, [loadSessionKey, stream.channelName, stream.id])
+
+	useEffect(() => {
+		if (volume !== lastVolumeRef.current) {
+			userVolumeIntentRef.current = true
+			lastVolumeRef.current = volume
+			return
+		}
+
+		lastVolumeRef.current = volume
+	}, [volume])
 
 	const notifyReady = useCallback(() => {
 		if (readySignalSentRef.current) {
@@ -638,11 +668,134 @@ function YouTubeEmbed({
 			return
 		}
 
+		iframe.style.inset = ""
+		iframe.style.top = ""
+		iframe.style.right = ""
+		iframe.style.bottom = ""
+		iframe.style.left = ""
+		iframe.style.width = ""
+		iframe.style.height = ""
+		iframe.style.transform = ""
+
 		Object.assign(iframe.style, nextFrameStyle)
 	}
 
+	const clearReadyTimeout = useCallback(() => {
+		window.clearTimeout(readyTimeoutRef.current)
+		readyTimeoutRef.current = null
+	}, [])
+
+	const clearRecoveryTimeouts = useCallback(() => {
+		for (const timeoutId of recoveryTimeoutsRef.current) {
+			window.clearTimeout(timeoutId)
+		}
+		recoveryTimeoutsRef.current = []
+		window.clearTimeout(recoveryRebuildTimeoutRef.current)
+		recoveryRebuildTimeoutRef.current = null
+	}, [])
+
+	const requestPlayerRebuild = useCallback(() => {
+		clearReadyTimeout()
+		clearRecoveryTimeouts()
+		readyRef.current = false
+		setPlayerBuildKey((key) => key + 1)
+	}, [clearReadyTimeout, clearRecoveryTimeouts])
+
+	const applyPlayerSettings = useCallback((player, options = {}) => {
+		if (!player) {
+			return
+		}
+
+		const settings = settingsRef.current
+		player.setVolume?.(settings.volume)
+
+		if (
+			options.forceMuted ||
+			settings.muted ||
+			settings.volume === 0 ||
+			(!userVolumeIntentRef.current && settings.shouldAutoplay)
+		) {
+			player.mute?.()
+		} else {
+			player.unMute?.()
+		}
+
+		if (settings.shouldAutoplay || options.forceMuted) {
+			player.playVideo?.()
+		}
+	}, [])
+
+	const schedulePlaybackRecovery = useCallback(
+		(options = {}) => {
+			if (document.visibilityState !== "visible") {
+				return
+			}
+
+			recoveryAttemptIdRef.current += 1
+			const attemptId = recoveryAttemptIdRef.current
+			clearRecoveryTimeouts()
+
+			recoveryTimeoutsRef.current = YOUTUBE_RECOVERY_RETRY_DELAYS_MS.map(
+				(delayMs) =>
+					window.setTimeout(() => {
+						if (
+							attemptId !== recoveryAttemptIdRef.current ||
+							!readyRef.current ||
+							!playerRef.current ||
+							document.visibilityState !== "visible"
+						) {
+							return
+						}
+
+						applyPlayerSettings(playerRef.current, options)
+					}, delayMs),
+			)
+
+			recoveryRebuildTimeoutRef.current = window.setTimeout(() => {
+				if (
+					attemptId !== recoveryAttemptIdRef.current ||
+					!readyRef.current ||
+					!playerRef.current ||
+					document.visibilityState !== "visible"
+				) {
+					return
+				}
+
+				const playerState = playerRef.current.getPlayerState?.()
+				const stableStates = [
+					window.YT?.PlayerState?.PLAYING,
+					window.YT?.PlayerState?.BUFFERING,
+					window.YT?.PlayerState?.CUED,
+				]
+
+				if (stableStates.includes(playerState)) {
+					return
+				}
+
+				requestPlayerRebuild()
+			}, YOUTUBE_REBUILD_FALLBACK_DELAY_MS)
+		},
+		[applyPlayerSettings, clearRecoveryTimeouts, requestPlayerRebuild],
+	)
+
 	useEffect(() => {
 		let cancelled = false
+		let player = null
+		const mountNode = mountRef.current
+
+		readyRef.current = false
+		setSdkFailed(false)
+		clearReadyTimeout()
+		clearRecoveryTimeouts()
+		if (!mountNode) {
+			return undefined
+		}
+		mountNode.replaceChildren()
+		readyTimeoutRef.current = window.setTimeout(() => {
+			if (!readyRef.current && !cancelled) {
+				requestPlayerRebuild()
+			}
+		}, YOUTUBE_READY_TIMEOUT_MS)
 
 		loadYouTubeSdk()
 			.then((YT) => {
@@ -650,42 +803,72 @@ function YouTubeEmbed({
 					return
 				}
 
-				playerRef.current = new YT.Player(iframeId, {
+				const iframe = document.createElement("iframe")
+				iframe.id = iframeId
+				iframe.src = iframeSrc
+				iframe.title = `${stream.title} stream`
+				iframe.allowFullscreen = true
+				iframe.allow = "autoplay; fullscreen; picture-in-picture"
+				iframe.loading = "eager"
+				iframe.className = "bg-slate-950"
+				Object.assign(iframe.style, frameStyle)
+				mountNode.replaceChildren(iframe)
+
+				player = new YT.Player(iframe, {
 					events: {
 						onReady: (event) => {
 							const settings = settingsRef.current
+							clearReadyTimeout()
 							readyRef.current = true
+							playerRef.current = event.target
 							syncIframeStyles(event.target, settings.frameStyle)
-							event.target.setVolume(settings.volume)
 							notifyReady()
+							applyPlayerSettings(event.target)
 
-							if (settings.playbackToken > 0) {
-								event.target.mute()
-								event.target.playVideo?.()
-								return
+							if (settings.shouldAutoplay || settings.playbackToken > 0) {
+								schedulePlaybackRecovery({
+									forceMuted: settings.playbackToken > 0,
+								})
 							}
-
-							// Start YouTube streams silently on first load so they
-							// do not immediately blare audio before the user chooses.
-							event.target.mute()
-							if (settings.shouldAutoplay) {
-								event.target.playVideo?.()
+						},
+						onError: () => {
+							if (!cancelled) {
+								requestPlayerRebuild()
 							}
 						},
 					},
 				})
+				playerRef.current = player
 			})
-			.catch(() => {})
+			.catch(() => {
+				if (!cancelled) {
+					clearReadyTimeout()
+					clearRecoveryTimeouts()
+					setSdkFailed(true)
+				}
+			})
 
 		return () => {
 			cancelled = true
 			readyRef.current = false
-			if (typeof playerRef.current?.destroy === "function") {
-				playerRef.current.destroy()
+			clearReadyTimeout()
+			clearRecoveryTimeouts()
+			if (typeof player?.destroy === "function") {
+				player.destroy()
 			}
+			mountNode.replaceChildren()
 			playerRef.current = null
 		}
-	}, [iframeId, iframeSrc, notifyReady, stream.id])
+	}, [
+		applyPlayerSettings,
+		clearReadyTimeout,
+		clearRecoveryTimeouts,
+		iframeId,
+		notifyReady,
+		requestPlayerRebuild,
+		schedulePlaybackRecovery,
+		stream.id,
+	])
 
 	useEffect(() => {
 		const player = playerRef.current
@@ -702,62 +885,99 @@ function YouTubeEmbed({
 			return
 		}
 
-		player.setVolume(volume)
-		if (
-			skipInitialAudioSyncRef.current &&
-			!muted &&
-			volume > 0 &&
-			playbackToken <= 0
-		) {
-			skipInitialAudioSyncRef.current = false
-			if (shouldAutoplay) {
-				player.playVideo?.()
-			}
-			return
-		}
-
-		skipInitialAudioSyncRef.current = false
-		if (muted || volume === 0) {
-			player.mute()
-			if (shouldAutoplay) {
-				player.playVideo?.()
-			}
-			return
-		}
-
-		player.unMute()
+		applyPlayerSettings(player)
 		if (shouldAutoplay) {
-			player.playVideo?.()
+			schedulePlaybackRecovery()
+			return
 		}
-	}, [muted, playbackToken, shouldAutoplay, volume])
+
+		clearRecoveryTimeouts()
+	}, [
+		applyPlayerSettings,
+		clearRecoveryTimeouts,
+		muted,
+		playbackToken,
+		schedulePlaybackRecovery,
+		shouldAutoplay,
+		volume,
+	])
 
 	useEffect(() => {
 		const player = playerRef.current
-		if (playbackToken <= 0 || !player || !readyRef.current) {
+		const previousPlaybackToken = lastPlaybackTokenRef.current
+		lastPlaybackTokenRef.current = playbackToken
+		if (
+			playbackToken <= 0 ||
+			playbackToken === previousPlaybackToken ||
+			!player ||
+			!readyRef.current
+		) {
 			return
 		}
 
-		// Entering cinema mode is an explicit muted playback request.
-		player.mute()
-		player.playVideo?.()
-	}, [playbackToken])
+		schedulePlaybackRecovery({ forceMuted: true })
+	}, [playbackToken, schedulePlaybackRecovery])
+
+	useEffect(() => {
+		if (!shouldAutoplay) {
+			clearRecoveryTimeouts()
+			return undefined
+		}
+
+		const handleTabResume = () => {
+			if (!readyRef.current || !playerRef.current) {
+				return
+			}
+
+			schedulePlaybackRecovery({
+				forceMuted: settingsRef.current.playbackToken > 0,
+			})
+		}
+
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === "visible") {
+				handleTabResume()
+			}
+		}
+
+		document.addEventListener("visibilitychange", handleVisibilityChange)
+		window.addEventListener("focus", handleTabResume)
+		window.addEventListener("pageshow", handleTabResume)
+
+		return () => {
+			document.removeEventListener(
+				"visibilitychange",
+				handleVisibilityChange,
+			)
+			window.removeEventListener("focus", handleTabResume)
+			window.removeEventListener("pageshow", handleTabResume)
+		}
+	}, [clearRecoveryTimeouts, schedulePlaybackRecovery, shouldAutoplay])
 
 	return (
 		<div
 			ref={containerRef}
 			className="absolute inset-0 overflow-hidden bg-slate-950"
 		>
-			<iframe
-				id={iframeId}
-				className="bg-slate-950"
-				style={frameStyle}
-				src={iframeSrc}
-				title={`${stream.title} stream`}
-				allowFullScreen
-				allow="autoplay; fullscreen; picture-in-picture"
-				loading="eager"
-				onLoad={notifyReady}
-			/>
+			{sdkFailed ? (
+				<iframe
+					key={`${iframeId}-fallback`}
+					className="bg-slate-950"
+					style={frameStyle}
+					src={iframeSrc}
+					title={`${stream.title} stream`}
+					allowFullScreen
+					allow="autoplay; fullscreen; picture-in-picture"
+					loading="eager"
+					onLoad={notifyReady}
+				/>
+			) : (
+				<div
+					key={iframeId}
+					ref={mountRef}
+					className="absolute inset-0 bg-slate-950"
+				/>
+			)}
 		</div>
 	)
 }

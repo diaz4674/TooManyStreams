@@ -86,8 +86,8 @@ export default function AddStreamDialog({
 							</p>
 							<h2 className="mt-1 mb-1">Add a stream to {projectName}</h2>
 							<p className="m-0 text-sm text-slate-300/75">
-								Reuse something from your library or create a new channel entry for
-								this project.
+								Reuse something from your library or create a new channel entry
+								for this project.
 							</p>
 						</div>
 						<button
@@ -98,55 +98,6 @@ export default function AddStreamDialog({
 							Close
 						</button>
 					</div>
-
-					{existingStreams.length > 0 && (
-						<section className="grid gap-3 rounded-[1.2rem] border border-cyan-400/16 bg-slate-950/45 p-4">
-							<div>
-								<p className="m-0 text-cyan-300 text-sm font-bold tracking-[0.14em] uppercase">
-									Reuse Existing
-								</p>
-								<p className="mt-1 mb-0 text-sm text-slate-300/75">
-									These channels are already saved in your library but not in this
-									project yet.
-								</p>
-							</div>
-
-							{matchingExistingStreams.length > 0 ? (
-								<div className="h-[min(20rem,45vh)]">
-									<Virtuoso
-										data={matchingExistingStreams}
-										itemContent={(_, stream) => (
-											<div className="pb-2 last:pb-0">
-												<button
-													type="button"
-													onClick={() => {
-														onAddExistingStream(stream.id)
-														onClose()
-													}}
-													className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-left text-white transition-all duration-200 hover:-translate-y-px hover:bg-white/8 cursor-pointer"
-												>
-													<span className="min-w-0">
-														<strong className="block truncate">{stream.title}</strong>
-														<small className="block truncate text-slate-300/65">
-															{stream.platform === "youtube" ? "YouTube" : "Twitch"} |{" "}
-															{stream.channelName}
-														</small>
-													</span>
-													<span className="shrink-0 rounded-full bg-cyan-400/14 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
-														Add
-													</span>
-												</button>
-											</div>
-										)}
-									/>
-								</div>
-							) : (
-								<div className="rounded-2xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-300/70">
-									No saved streams match the details you&apos;ve entered yet.
-								</div>
-							)}
-						</section>
-					)}
 
 					<div className="grid gap-4 md:grid-cols-2">
 						<label className="grid gap-1.5 text-slate-300/80 text-[0.95rem]">
@@ -196,6 +147,58 @@ export default function AddStreamDialog({
 						</p>
 					)}
 
+					{existingStreams.length > 0 && (
+						<section className="grid gap-3 rounded-[1.2rem] border border-cyan-400/16 bg-slate-950/45 p-4">
+							<div>
+								<p className="m-0 text-cyan-300 text-sm font-bold tracking-[0.14em] uppercase">
+									Reuse Existing
+								</p>
+								<p className="mt-1 mb-0 text-sm text-slate-300/75">
+									These channels are already saved in your library but not in
+									this project yet.
+								</p>
+							</div>
+
+							{matchingExistingStreams.length > 0 ? (
+								<div className="h-[min(20rem,45vh)]">
+									<Virtuoso
+										data={matchingExistingStreams}
+										itemContent={(_, stream) => (
+											<div className="pb-2 last:pb-0">
+												<button
+													type="button"
+													onClick={() => {
+														onAddExistingStream(stream.id)
+														onClose()
+													}}
+													className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-left text-white transition-all duration-200 hover:-translate-y-px hover:bg-white/8 cursor-pointer"
+												>
+													<span className="min-w-0">
+														<strong className="block truncate">
+															{stream.title}
+														</strong>
+														<small className="block truncate text-slate-300/65">
+															{stream.platform === "youtube"
+																? "YouTube"
+																: "Twitch"}{" "}
+															| {stream.channelName}
+														</small>
+													</span>
+													<span className="shrink-0 rounded-full bg-cyan-400/14 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
+														Add
+													</span>
+												</button>
+											</div>
+										)}
+									/>
+								</div>
+							) : (
+								<div className="rounded-2xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-300/70">
+									No saved streams match the details you&apos;ve entered yet.
+								</div>
+							)}
+						</section>
+					)}
 					<div className="flex justify-between gap-3 max-[760px]:flex-col">
 						<button
 							type="button"

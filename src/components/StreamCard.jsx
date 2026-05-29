@@ -77,6 +77,7 @@ function StreamCardComponent({
 	isDragging = false,
 	presentation = "default",
 	focusTileRole = "primary",
+	focusTilePlacement = "main",
 	onExitFocus,
 	onPromoteFocus,
 	onRemoveFromFocus,
@@ -95,9 +96,17 @@ function StreamCardComponent({
 		stream.platform === "youtube" &&
 		!isChatCapable &&
 		typeof onToggleChat === "function"
+	const showCompanionHoverActions =
+		isFocusPresentation && focusTileRole === "companion"
+	const showPersistentBottomCompanionRemove =
+		showCompanionHoverActions &&
+		focusTilePlacement === "bottom" &&
+		typeof onRemoveFromFocus === "function"
+	const showFocusVolumeOnHover = isFocusPresentation && showVolume
 	const dragHandleLabel = "Drag to reorder stream"
 	const shouldCropToFill =
-		stream.platform === "youtube" && (fluidVideo || isFocusPresentation)
+		stream.platform === "youtube" &&
+		(isFocusPresentation ? focusTileRole === "companion" : fluidVideo)
 	const articleRef = useRef(null)
 	const isCardVisibleRef = useRef(isFocusPresentation)
 	const lastAppResumeAtRef = useRef(0)
@@ -284,7 +293,7 @@ function StreamCardComponent({
 			ref={articleRef}
 			className={`relative flex h-full min-w-0 overflow-hidden ${
 				isFocusPresentation
-					? "rounded-[1.7rem] border border-white/10 bg-slate-950/94 shadow-[0_28px_90px_rgba(2,6,23,0.62)]"
+					? "group/focus-tile rounded-[1.7rem] border border-white/10 bg-slate-950/94 shadow-[0_28px_90px_rgba(2,6,23,0.62)]"
 					: "rounded-[1.45rem] border border-cyan-400/18 bg-[linear-gradient(180deg,rgba(22,18,55,0.96),rgba(10,14,32,0.98))] shadow-[0_24px_60px_rgba(8,15,35,0.48)]"
 			} transition-[transform,box-shadow,opacity] duration-300 ${
 				isDragging ? "z-20 rotate-[1deg] opacity-90" : ""
@@ -381,15 +390,24 @@ function StreamCardComponent({
 					{isFocusPresentation && (
 						<div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
 							<div className="flex items-start justify-between gap-3">
-								<div className="pointer-events-auto inline-flex max-w-[72%] items-center gap-2 rounded-full bg-slate-950/72 px-3 py-2 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(2,6,23,0.28)] backdrop-blur">
-									<span className="rounded-full bg-cyan-400/16 px-2 py-1 text-[0.6rem] font-bold uppercase tracking-[0.16em] text-cyan-50/88">
-										{focusTileRole === "primary" ? "Primary" : "Companion"}
-									</span>
+								<div
+									className={`pointer-events-auto inline-flex max-w-[72%] items-center gap-2 rounded-full bg-slate-950/72 px-3 py-2 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(2,6,23,0.28)] backdrop-blur transition-opacity duration-200 ${
+										showCompanionHoverActions
+											? "opacity-0 group-hover/focus-tile:opacity-100 group-focus-within/focus-tile:opacity-100"
+											: "opacity-100"
+									}`}
+								>
 									<PlatformLogo platform={stream.platform} />
 									<span className="truncate">{stream.title}</span>
 								</div>
 
-								<div className="flex items-center gap-2">
+								<div
+									className={`flex items-center gap-2 transition-opacity duration-200 ${
+										showCompanionHoverActions
+											? "opacity-0 group-hover/focus-tile:opacity-100 group-focus-within/focus-tile:opacity-100"
+											: "opacity-100"
+									}`}
+								>
 									{focusTileRole === "companion" &&
 										typeof onPromoteFocus === "function" && (
 											<FocusActionButton
@@ -399,6 +417,7 @@ function StreamCardComponent({
 											/>
 										)}
 									{focusTileRole === "companion" &&
+										!showPersistentBottomCompanionRemove &&
 										typeof onRemoveFromFocus === "function" && (
 											<FocusActionButton
 												icon="fa-minus"
@@ -417,8 +436,24 @@ function StreamCardComponent({
 								</div>
 							</div>
 
+							{showPersistentBottomCompanionRemove && (
+								<div className="flex w-full justify-end">
+									<FocusActionButton
+										icon="fa-minus"
+										label={`Remove ${stream.title} from cinema mode`}
+										onClick={onRemoveFromFocus}
+									/>
+								</div>
+							)}
+
 							<div className="flex items-end justify-end">
-								<div className="flex w-full items-end justify-end gap-3">
+								<div
+									className={`flex w-full items-end justify-end gap-3 transition-opacity duration-200 ${
+										showFocusVolumeOnHover
+											? "opacity-0 group-hover/focus-tile:opacity-100 group-focus-within/focus-tile:opacity-100"
+											: "opacity-100"
+									}`}
+								>
 									{showVolume && (
 										<FocusVolumeControl
 											streamTitle={stream.title}
@@ -432,21 +467,19 @@ function StreamCardComponent({
 					)}
 				</div>
 
-				{!isFocusPresentation &&
-					chatExpanded &&
-					isChatCapable && (
-						<div
-							className="mx-3 mb-3 min-w-0 shrink-0 overflow-hidden rounded-[1rem] border border-cyan-400/14 bg-slate-950"
-							style={{ height: `${inlineChatHeight}px` }}
-						>
-							<EmbeddedStreamChat
-								stream={stream}
-								title={`${stream.title} inline chat`}
-								iframeClassName="h-full w-full border-0 bg-slate-950"
-								fallbackClassName="flex h-full w-full items-center justify-center px-5 text-center text-sm text-slate-300/82"
-							/>
-						</div>
-					)}
+				{!isFocusPresentation && chatExpanded && isChatCapable && (
+					<div
+						className="mx-3 mb-3 min-w-0 shrink-0 overflow-hidden rounded-[1rem] border border-cyan-400/14 bg-slate-950"
+						style={{ height: `${inlineChatHeight}px` }}
+					>
+						<EmbeddedStreamChat
+							stream={stream}
+							title={`${stream.title} inline chat`}
+							iframeClassName="h-full w-full border-0 bg-slate-950"
+							fallbackClassName="flex h-full w-full items-center justify-center px-5 text-center text-sm text-slate-300/82"
+						/>
+					</div>
+				)}
 
 				{!isFocusPresentation && (
 					<div className="mt-auto flex shrink-0 items-center gap-3 border-t border-cyan-400/14 px-3 py-2.5">
