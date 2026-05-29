@@ -48,7 +48,7 @@ export default function HomepageSeoSections() {
 							className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-5 py-3 font-bold text-white transition-colors hover:bg-white/12"
 						>
 							<i className="fa-brands fa-twitch text-cyan-300" />
-							Twitch Guide
+							Watch Multiple Twitch Streams
 						</Link>
 						<Link
 							to="/multistream-viewer"

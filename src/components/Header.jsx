@@ -20,6 +20,7 @@ export default function Header({
 	onOpenProjects,
 	onAddExistingStream,
 	onAddStream,
+	onPreviewTwitchResult,
 	onTwitchSessionChange,
 	twitchConnectionMessage,
 }) {
@@ -151,6 +152,7 @@ export default function Header({
 				activeStreamIds={activeStreamIds}
 				onAddExistingStream={onAddExistingStream}
 				onAddStream={onAddStream}
+				onPreviewResult={onPreviewTwitchResult}
 				onSessionChange={onTwitchSessionChange}
 				initialConnectionMessage={twitchConnectionMessage}
 			/>

@@ -412,6 +412,7 @@ export default function HomePage() {
 		getStoredTwitchSession(),
 	)
 	const [twitchConnectionMessage, setTwitchConnectionMessage] = useState("")
+	const [searchPreviewStream, setSearchPreviewStream] = useState(null)
 	const [liveTwitchSnapshot, setLiveTwitchSnapshot] = useState({
 		projectId: "",
 		channelNames: EMPTY_LIVE_CHANNEL_NAMES,
@@ -735,13 +736,72 @@ export default function HomePage() {
 		useWallStore.getState().clearFocus()
 	}, [])
 
+	const handleOpenSearchPreview = useCallback((result) => {
+		if (!result?.isLive) {
+			return
+		}
+
+		setSearchPreviewStream({
+			id: `search-preview:twitch:${result.channelName}`,
+			platform: "twitch",
+			channelName: result.channelName,
+			title: result.title,
+			existingStreamId: result.stream?.id ?? null,
+		})
+	}, [])
+
+	const handleCloseSearchPreview = useCallback(() => {
+		setSearchPreviewStream(null)
+	}, [])
+
+	const isPreviewStreamAlreadyAdded = Boolean(
+		searchPreviewStream &&
+			((searchPreviewStream.existingStreamId &&
+				activeProject.streamIds.includes(searchPreviewStream.existingStreamId)) ||
+				activeProject.streamIds.some((streamId) => {
+					const stream = viewerState.streamsById[streamId]
+					return (
+						stream?.platform === searchPreviewStream.platform &&
+						stream.channelName.trim().toLowerCase() ===
+							searchPreviewStream.channelName.trim().toLowerCase()
+					)
+				})),
+	)
+
+	const handleAddPreviewStream = useCallback(() => {
+		if (!searchPreviewStream || isPreviewStreamAlreadyAdded) {
+			return
+		}
+
+		if (searchPreviewStream.existingStreamId) {
+			addExistingStreamToProject(searchPreviewStream.existingStreamId)
+			return
+		}
+
+		createStreamAndAddToProject({
+			platform: searchPreviewStream.platform,
+			channelName: searchPreviewStream.channelName,
+			title: searchPreviewStream.title,
+		})
+	}, [
+		addExistingStreamToProject,
+		createStreamAndAddToProject,
+		isPreviewStreamAlreadyAdded,
+		searchPreviewStream,
+	])
+
 	useEffect(() => {
-		if (focusedStreamIds.length === 0) {
+		if (focusedStreamIds.length === 0 && !searchPreviewStream) {
 			return undefined
 		}
 
 		const handleEsc = (event) => {
 			if (event.key === "Escape") {
+				if (searchPreviewStream) {
+					handleCloseSearchPreview()
+					return
+				}
+
 				handleClearFocus()
 			}
 		}
@@ -750,7 +810,12 @@ export default function HomePage() {
 		return () => {
 			document.removeEventListener("keydown", handleEsc)
 		}
-	}, [focusedStreamIds.length, handleClearFocus])
+	}, [
+		focusedStreamIds.length,
+		handleClearFocus,
+		handleCloseSearchPreview,
+		searchPreviewStream,
+	])
 
 	const hasStreams = streams.length > 0
 	const layoutMode = activeProject.layoutMode ?? "auto"
@@ -807,6 +872,7 @@ export default function HomePage() {
 						onOpenProjects={() => setProjectsDialogOpen(true)}
 						onAddExistingStream={addExistingStreamToProject}
 						onAddStream={createStreamAndAddToProject}
+						onPreviewTwitchResult={handleOpenSearchPreview}
 						onTwitchSessionChange={handleTwitchSessionChange}
 						twitchConnectionMessage={twitchConnectionMessage}
 					/>
@@ -818,6 +884,10 @@ export default function HomePage() {
 							streams={streams}
 							layoutMode="matrix"
 							maxColumns={viewerState.maxColumns}
+							previewStream={searchPreviewStream}
+							previewStreamAlreadyAdded={isPreviewStreamAlreadyAdded}
+							onAddPreviewStream={handleAddPreviewStream}
+							onClosePreview={handleCloseSearchPreview}
 						/>
 
 						{chatOpen && chatCapableStreams.length > 0 && (
@@ -902,13 +972,17 @@ export default function HomePage() {
 							</div>
 						)}
 					</div>
-				) : hasStreams ? (
+				) : hasStreams || searchPreviewStream ? (
 					<div className="flex min-w-0 items-start gap-4 max-xl:flex-col">
 						<StreamGrid
 							streams={streams}
 							layoutMode={layoutMode}
 							maxColumns={viewerState.maxColumns}
 							expandedCardChatStreamId={expandedCardChatStreamId}
+							previewStream={searchPreviewStream}
+							previewStreamAlreadyAdded={isPreviewStreamAlreadyAdded}
+							onAddPreviewStream={handleAddPreviewStream}
+							onClosePreview={handleCloseSearchPreview}
 							focusState={{
 								focusedStreamIds,
 								focusLayout,

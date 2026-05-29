@@ -41,6 +41,10 @@ const FOCUS_CHAT_DRAWER_MAX_HEIGHT_PX = 832
 const FOCUS_CHAT_DRAWER_MIN_WIDTH_PX = 280
 const FOCUS_CHAT_DRAWER_MIN_HEIGHT_PX = 240
 const FOCUS_CHAT_RESIZE_HIT_SIZE_PX = 12
+const PREVIEW_CHAT_PANEL_WIDTH_PX = 360
+const PREVIEW_CHAT_PANEL_GAP_PX = 20
+const PREVIEW_CHAT_MIN_VIEWPORT_WIDTH_PX = 1080
+const PREVIEW_CHAT_MIN_CONTENT_WIDTH_PX = 480
 const WALL_LOADER_TIMEOUT_MS = 7000
 
 function clamp(value, min, max) {
@@ -353,6 +357,11 @@ function FocusOverlayChrome({
 	onToggleFocusChat,
 	onSetFocusChatStream,
 	onClearFocus,
+	showLayoutControls = true,
+	showChatControls = true,
+	showEmptySlots = true,
+	badgeLabel = "Cinema Mode",
+	primaryAction = null,
 }) {
 	const drawerRect = useMemo(
 		() => getFocusChatDrawerRect(viewportWidth, viewportHeight),
@@ -534,11 +543,11 @@ function FocusOverlayChrome({
 			<div className="pointer-events-none fixed inset-x-6 top-6 z-[80] flex items-start justify-between gap-3 max-sm:inset-x-4">
 				<div className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-slate-950/78 px-4 py-2 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-cyan-50 shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
 					<i className="fa-solid fa-film text-[0.72rem]" />
-					Cinema Mode
+					{badgeLabel}
 				</div>
 
 				<div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-					{hasMultiFocusExperience && (
+					{showLayoutControls && hasMultiFocusExperience && (
 						<div className="inline-flex items-center gap-1 rounded-full bg-slate-950/78 p-1 shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
 							<button
 								type="button"
@@ -565,7 +574,7 @@ function FocusOverlayChrome({
 						</div>
 					)}
 
-					{focusedChatStreams.length > 0 && (
+					{showChatControls && focusedChatStreams.length > 0 && (
 						<button
 							type="button"
 							onClick={onToggleFocusChat}
@@ -579,6 +588,21 @@ function FocusOverlayChrome({
 						</button>
 					)}
 
+					{primaryAction && (
+						<button
+							type="button"
+							onClick={primaryAction.onClick}
+							disabled={primaryAction.disabled}
+							className={`rounded-full px-4 py-2 text-[0.68rem] font-bold uppercase tracking-[0.14em] shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur transition-colors ${
+								primaryAction.disabled
+									? "cursor-not-allowed bg-white/8 text-slate-400"
+									: "cursor-pointer bg-cyan-400/18 text-cyan-50 hover:bg-cyan-400/26"
+							}`}
+						>
+							{primaryAction.label}
+						</button>
+					)}
+
 					<button
 						type="button"
 						onClick={onClearFocus}
@@ -589,14 +613,15 @@ function FocusOverlayChrome({
 				</div>
 			</div>
 
-			{!hasMultiFocusExperience && hiddenCompanionCount > 0 && (
+			{showEmptySlots && !hasMultiFocusExperience && hiddenCompanionCount > 0 && (
 				<div className="pointer-events-none fixed top-24 left-1/2 z-[80] -translate-x-1/2 rounded-full bg-slate-950/78 px-4 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-slate-100 shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
 					Wider viewport restores {hiddenCompanionCount} companion
 					{hiddenCompanionCount > 1 ? "s" : ""}
 				</div>
 			)}
 
-			{hasMultiFocusExperience &&
+			{showEmptySlots &&
+				hasMultiFocusExperience &&
 				emptySlotStyles.map((style, index) => (
 					<FocusAddSlot
 						key={`focus-slot-${index}`}
@@ -606,7 +631,7 @@ function FocusOverlayChrome({
 					/>
 				))}
 
-			{focusChatOpen && focusedChatStreams.length > 0 && (
+			{showChatControls && focusChatOpen && focusedChatStreams.length > 0 && (
 				<div
 					className="pointer-events-none fixed z-[85]"
 					style={{
@@ -773,6 +798,113 @@ function FocusOverlayChrome({
 							</svg>
 						</div>
 					</div>
+				</div>
+			)}
+		</>
+	)
+}
+
+function PreviewOverlayCard({
+	stream,
+	viewportWidth,
+	viewportHeight,
+	onClosePreview,
+}) {
+	const previewLayout = useMemo(() => {
+		const baseFrame =
+			buildFocusSlotStyles({
+				focusLayout: "hero",
+				slotCount: 1,
+				viewportWidth,
+				viewportHeight,
+			})[0] ?? null
+
+		if (!baseFrame) {
+			return null
+		}
+
+		const shouldShowChat =
+			isStreamChatCapable(stream) &&
+			viewportWidth >= PREVIEW_CHAT_MIN_VIEWPORT_WIDTH_PX &&
+			baseFrame.width - PREVIEW_CHAT_PANEL_WIDTH_PX - PREVIEW_CHAT_PANEL_GAP_PX >=
+				PREVIEW_CHAT_MIN_CONTENT_WIDTH_PX
+
+		if (!shouldShowChat) {
+			return {
+				videoFrame: baseFrame,
+				chatFrame: null,
+			}
+		}
+
+		const chatWidth = Math.min(
+			PREVIEW_CHAT_PANEL_WIDTH_PX,
+			Math.max(
+				FOCUS_CHAT_DRAWER_MIN_WIDTH_PX,
+				baseFrame.width * 0.32,
+			),
+		)
+		const videoWidth = baseFrame.width - chatWidth - PREVIEW_CHAT_PANEL_GAP_PX
+
+		return {
+			videoFrame: {
+				...baseFrame,
+				width: videoWidth,
+			},
+			chatFrame: {
+				left: baseFrame.left + videoWidth + PREVIEW_CHAT_PANEL_GAP_PX,
+				top: baseFrame.top,
+				width: chatWidth,
+				height: baseFrame.height,
+			},
+		}
+	}, [stream, viewportHeight, viewportWidth])
+
+	if (!previewLayout) {
+		return null
+	}
+
+	return (
+		<>
+			<div
+				className="pointer-events-auto"
+				style={{
+					position: "fixed",
+					left: previewLayout.videoFrame.left,
+					top: previewLayout.videoFrame.top,
+					width: previewLayout.videoFrame.width,
+					height: previewLayout.videoFrame.height,
+					zIndex: 70,
+				}}
+			>
+				<StreamCard
+					stream={stream}
+					videoHeight={previewLayout.videoFrame.height}
+					volume={100}
+					onVolumeChange={() => {}}
+					onRemove={() => {}}
+					onEdit={() => {}}
+					presentation="focus"
+					focusTileRole="primary"
+					onExitFocus={onClosePreview}
+					loadSessionKey={stream.id}
+				/>
+			</div>
+
+			{previewLayout.chatFrame && (
+				<div
+					className="pointer-events-auto fixed z-[72]"
+					style={{
+						left: previewLayout.chatFrame.left,
+						top: previewLayout.chatFrame.top,
+						width: previewLayout.chatFrame.width,
+						height: previewLayout.chatFrame.height,
+					}}
+				>
+					<StreamChatSidebar
+						streams={[stream]}
+						activeStreamId={stream.id}
+						variant="overlay"
+					/>
 				</div>
 			)}
 		</>
@@ -968,6 +1100,7 @@ function AutoStreamGrid({
 	maxColumns = 4,
 	expandedCardChatStreamId = null,
 	primaryFocusedStreamId = null,
+	effectivePrimaryFocusedStreamId = null,
 	focusPlaybackToken = 0,
 	primaryFocusTransitionKey = 0,
 	onVolumeChange,
@@ -977,7 +1110,10 @@ function AutoStreamGrid({
 	onToggleChat,
 	onFocus,
 	focusFramesByStreamId = {},
+	visibleFocusFramesByStreamId = {},
 	hasActiveFocus = false,
+	hasOverlayPresentation = false,
+	hasPreviewOverlay = false,
 	onClearFocus,
 	onPromoteFocusStream,
 	onRemoveFocusCompanion,
@@ -1050,15 +1186,20 @@ function AutoStreamGrid({
 					videoHeight: layout.videoHeight,
 					volume: streamVolumes[stream.id] ?? 100,
 					forcedMuted:
-						hasActiveFocus && stream.id !== primaryFocusedStreamId
+						hasOverlayPresentation &&
+						stream.id !== effectivePrimaryFocusedStreamId
 							? true
 							: undefined,
 					playbackToken:
-						hasActiveFocus && stream.id === primaryFocusedStreamId
+						hasActiveFocus &&
+						!hasPreviewOverlay &&
+						stream.id === primaryFocusedStreamId
 							? focusPlaybackToken
 							: 0,
 					primaryFocusTransitionKey:
-						hasActiveFocus && stream.id === primaryFocusedStreamId
+						hasActiveFocus &&
+						!hasPreviewOverlay &&
+						stream.id === primaryFocusedStreamId
 							? primaryFocusTransitionKey
 							: 0,
 					onVolumeChange,
@@ -1066,8 +1207,8 @@ function AutoStreamGrid({
 					onEdit,
 					onToggleChat,
 					onFocus,
-					focusFrame: focusFramesByStreamId[stream.id] ?? null,
-					hasActiveFocus,
+					focusFrame: visibleFocusFramesByStreamId[stream.id] ?? null,
+					hasActiveFocus: hasOverlayPresentation,
 					onClearFocus,
 					onPromoteFocusStream,
 					onRemoveFocusCompanion,
@@ -1154,6 +1295,10 @@ export default function StreamGrid({
 	streams,
 	layoutMode = "auto",
 	maxColumns = 4,
+	previewStream = null,
+	previewStreamAlreadyAdded = false,
+	onAddPreviewStream,
+	onClosePreview,
 	onVolumeChange,
 	onRemove,
 	onEdit,
@@ -1313,6 +1458,8 @@ export default function StreamGrid({
 
 	const isMatrixMode = layoutMode === "matrix"
 	const hasActiveFocus = focusedStreamIds.length > 0
+	const hasPreviewOverlay = Boolean(previewStream)
+	const hasOverlayPresentation = hasActiveFocus || hasPreviewOverlay
 	const hasMultiFocusExperience =
 		containerSize.viewportWidth >= FOCUS_WIDE_MIN_WIDTH_PX &&
 		containerSize.viewportHeight >= FOCUS_WIDE_MIN_HEIGHT_PX
@@ -1383,6 +1530,12 @@ export default function StreamGrid({
 			),
 		[focusedStreamIdSet, streams],
 	)
+	const visibleFocusFramesByStreamId = hasPreviewOverlay
+		? {}
+		: focusFramesByStreamId
+	const effectivePrimaryFocusedStreamId = hasPreviewOverlay
+		? null
+		: primaryFocusedStreamId
 
 	return (
 		<section
@@ -1393,7 +1546,45 @@ export default function StreamGrid({
 					: "relative min-h-[calc(100vh-13rem)] min-w-0 w-full flex-1 transition-opacity duration-300"
 			}
 		>
-			{hasActiveFocus && !isMatrixMode && (
+			{!isMatrixMode && hasPreviewOverlay && (
+				<>
+					<FocusOverlayChrome
+						hasMultiFocusExperience={false}
+						hiddenCompanionCount={0}
+						focusLayout="hero"
+						focusChatOpen={false}
+						focusChatStreamId={null}
+						focusedChatStreams={[]}
+						emptySlotStyles={[]}
+						availableCompanionStreams={[]}
+						viewportWidth={containerSize.viewportWidth}
+						viewportHeight={containerSize.viewportHeight}
+						onAddFocusCompanion={() => {}}
+						onSetFocusLayout={() => {}}
+						onToggleFocusChat={() => {}}
+						onSetFocusChatStream={() => {}}
+						onClearFocus={onClosePreview}
+						showLayoutControls={false}
+						showChatControls={false}
+						showEmptySlots={false}
+						primaryAction={{
+							label: previewStreamAlreadyAdded ? "Added" : "Add",
+							onClick: () => onAddPreviewStream?.(),
+							disabled:
+								previewStreamAlreadyAdded ||
+								typeof onAddPreviewStream !== "function",
+						}}
+					/>
+					<PreviewOverlayCard
+						stream={previewStream}
+						viewportWidth={containerSize.viewportWidth}
+						viewportHeight={containerSize.viewportHeight}
+						onClosePreview={onClosePreview}
+					/>
+				</>
+			)}
+
+			{!isMatrixMode && !hasPreviewOverlay && hasActiveFocus && (
 				<FocusOverlayChrome
 					hasMultiFocusExperience={hasMultiFocusExperience}
 					hiddenCompanionCount={hiddenCompanionCount}
@@ -1430,6 +1621,7 @@ export default function StreamGrid({
 					maxColumns={maxColumns}
 					expandedCardChatStreamId={expandedCardChatStreamId}
 					primaryFocusedStreamId={primaryFocusedStreamId}
+					effectivePrimaryFocusedStreamId={effectivePrimaryFocusedStreamId}
 					focusPlaybackToken={focusPlaybackToken}
 					primaryFocusTransitionKey={primaryFocusTransitionKey}
 					onVolumeChange={onVolumeChange}
@@ -1438,8 +1630,11 @@ export default function StreamGrid({
 					onReorder={onReorder}
 					onToggleChat={onToggleChat}
 					onFocus={onEnterFocus}
-					focusFramesByStreamId={focusFramesByStreamId}
-					hasActiveFocus={hasActiveFocus}
+					focusFramesByStreamId={visibleFocusFramesByStreamId}
+					hasActiveFocus={hasOverlayPresentation}
+					visibleFocusFramesByStreamId={visibleFocusFramesByStreamId}
+					hasOverlayPresentation={hasOverlayPresentation}
+					hasPreviewOverlay={hasPreviewOverlay}
 					onClearFocus={onClearFocus}
 					onPromoteFocusStream={onPromoteFocusStream}
 					onRemoveFocusCompanion={onRemoveFocusCompanion}

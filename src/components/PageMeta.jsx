@@ -30,6 +30,7 @@ export default function PageMeta({
 	description,
 	path = "/",
 	image = getSocialPreviewUrl(),
+	structuredData = null,
 }) {
 	useEffect(() => {
 		const canonicalUrl = getCanonicalUrl(path)
@@ -65,6 +66,36 @@ export default function PageMeta({
 
 		ensureCanonicalLink().setAttribute("href", canonicalUrl)
 	}, [description, image, path, title])
+
+	useEffect(() => {
+		const selector = 'script[data-page-meta-structured-data="true"]'
+		document.head
+			.querySelectorAll(selector)
+			.forEach((node) => node.parentNode?.removeChild(node))
+
+		const entries = Array.isArray(structuredData)
+			? structuredData
+			: structuredData
+				? [structuredData]
+				: []
+
+		if (entries.length === 0) {
+			return undefined
+		}
+
+		const nodes = entries.map((entry) => {
+			const script = document.createElement("script")
+			script.type = "application/ld+json"
+			script.dataset.pageMetaStructuredData = "true"
+			script.textContent = JSON.stringify(entry)
+			document.head.append(script)
+			return script
+		})
+
+		return () => {
+			nodes.forEach((node) => node.parentNode?.removeChild(node))
+		}
+	}, [structuredData])
 
 	return null
 }

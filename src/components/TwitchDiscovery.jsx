@@ -33,6 +33,7 @@ export default function TwitchDiscovery({
 	activeStreamIds,
 	onAddExistingStream,
 	onAddStream,
+	onPreviewResult,
 	onSessionChange,
 	initialConnectionMessage = "",
 }) {
@@ -242,6 +243,15 @@ export default function TwitchDiscovery({
 		}
 	}
 
+	const handlePreview = (result) => {
+		if (!result.isLive) {
+			return
+		}
+
+		onPreviewResult?.(result)
+		setOpen(false)
+	}
+
 	const hasQuery = trimmedQuery.length >= 2
 	const isConnected = connectionState === "connected"
 
@@ -344,9 +354,9 @@ export default function TwitchDiscovery({
 												<i className="fa-brands fa-twitch" />
 											</div>
 										)}
-										<div className="min-w-0 flex-1">
-											<div className="flex items-center gap-2">
-												<a
+											<div className="min-w-0 flex-1">
+												<div className="flex items-center gap-2">
+													<a
 													href={getTwitchChannelUrl(result.channelName)}
 													target="_blank"
 													rel="noreferrer"
@@ -366,6 +376,23 @@ export default function TwitchDiscovery({
 														{result.isLive ? "Live" : "Offline"}
 													</span>
 												)}
+												<button
+													type="button"
+													disabled={!result.isLive}
+													onClick={() => handlePreview(result)}
+													title={
+														result.isLive
+															? `Preview ${result.title} in cinema mode`
+															: "Preview available for live channels only"
+													}
+													className={`shrink-0 rounded-full px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-wider transition-colors ${
+														result.isLive
+															? "bg-cyan-400/14 text-cyan-100 cursor-pointer hover:bg-cyan-400/22"
+															: "bg-white/6 text-slate-400 cursor-not-allowed"
+													}`}
+												>
+													Preview
+												</button>
 											</div>
 											<a
 												href={getTwitchChannelUrl(result.channelName)}

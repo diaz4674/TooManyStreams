@@ -596,6 +596,7 @@ function YouTubeEmbed({
 	const playerRef = useRef(null)
 	const readyRef = useRef(false)
 	const readySignalSentRef = useRef(false)
+	const skipInitialAudioSyncRef = useRef(true)
 	const settingsRef = useRef({
 		frameStyle: null,
 		muted,
@@ -619,6 +620,7 @@ function YouTubeEmbed({
 
 	useEffect(() => {
 		readySignalSentRef.current = false
+		skipInitialAudioSyncRef.current = true
 	}, [loadSessionKey, stream.channelName, stream.id])
 
 	const notifyReady = useCallback(() => {
@@ -663,11 +665,9 @@ function YouTubeEmbed({
 								return
 							}
 
-							if (settings.muted || settings.volume === 0) {
-								event.target.mute()
-							} else {
-								event.target.unMute()
-							}
+							// Start YouTube streams silently on first load so they
+							// do not immediately blare audio before the user chooses.
+							event.target.mute()
 							if (settings.shouldAutoplay) {
 								event.target.playVideo?.()
 							}
@@ -703,6 +703,20 @@ function YouTubeEmbed({
 		}
 
 		player.setVolume(volume)
+		if (
+			skipInitialAudioSyncRef.current &&
+			!muted &&
+			volume > 0 &&
+			playbackToken <= 0
+		) {
+			skipInitialAudioSyncRef.current = false
+			if (shouldAutoplay) {
+				player.playVideo?.()
+			}
+			return
+		}
+
+		skipInitialAudioSyncRef.current = false
 		if (muted || volume === 0) {
 			player.mute()
 			if (shouldAutoplay) {
@@ -715,7 +729,7 @@ function YouTubeEmbed({
 		if (shouldAutoplay) {
 			player.playVideo?.()
 		}
-	}, [muted, shouldAutoplay, volume])
+	}, [muted, playbackToken, shouldAutoplay, volume])
 
 	useEffect(() => {
 		const player = playerRef.current
