@@ -1,0 +1,21 @@
+{
+	"name": "TooManyStreams",
+	"short_name": "TooManyStreams",
+	"icons": [
+		{
+			"src": "/favicon.png",
+			"sizes": "1254x1254",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/apple-touch-icon.png",
+			"sizes": "1254x1254",
+			"type": "image/png",
+			"purpose": "any"
+		}
+	],
+	"theme_color": "#090f23",
+	"background_color": "#090f23",
+	"display": "standalone"
+}
