@@ -8,7 +8,9 @@ export default function ProjectsDialog({
 	onCreateProject,
 	onOpenProject,
 	onRenameProject,
+	onShareProject,
 	onDeleteProject,
+	shareFeedback,
 }) {
 	const [newProjectName, setNewProjectName] = useState("")
 	const [editingProjectId, setEditingProjectId] = useState("")
@@ -36,7 +38,7 @@ export default function ProjectsDialog({
 		<div
 			ref={backdropRef}
 			onClick={handleBackdropClick}
-			className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 p-4 backdrop-blur-sm"
+			className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/75 p-4 backdrop-blur-sm"
 		>
 			<div className="w-[min(42rem,calc(100vw-2rem))] rounded-[1.4rem] border border-slate-400/20 bg-slate-900/95 text-slate-50 shadow-[0_30px_70px_rgba(0,0,0,0.45)]">
 				<div className="grid gap-5 p-5">
@@ -101,6 +103,8 @@ export default function ProjectsDialog({
 								const isActive = project.id === activeProjectId
 								const isEditing = project.id === editingProjectId
 								const canDelete = projects.length > 1
+								const projectShareFeedback =
+									shareFeedback?.projectId === project.id ? shareFeedback : null
 
 								return (
 									<div className="pb-3 last:pb-0">
@@ -160,6 +164,16 @@ export default function ProjectsDialog({
 														type="button"
 														onClick={(event) => {
 															event.stopPropagation()
+															onShareProject(project.id)
+														}}
+														className="rounded-xl border-0 bg-cyan-500/18 px-4 py-2.5 font-bold text-white shadow-[0_0_0_1px_rgba(34,211,238,0.14)] transition-all duration-200 cursor-pointer hover:bg-cyan-500/24"
+													>
+														Share Project
+													</button>
+													<button
+														type="button"
+														onClick={(event) => {
+															event.stopPropagation()
 															onDeleteProject(project.id)
 														}}
 														disabled={!canDelete}
@@ -169,6 +183,18 @@ export default function ProjectsDialog({
 													</button>
 												</div>
 											</div>
+
+											{projectShareFeedback?.message && (
+												<p
+													className={`mt-3 mb-0 text-sm ${
+														projectShareFeedback.tone === "success"
+															? "text-cyan-200"
+															: "text-amber-200"
+													}`}
+												>
+													{projectShareFeedback.message}
+												</p>
+											)}
 
 											{isEditing && (
 												<div className="mt-3 flex gap-3 max-[760px]:flex-col">

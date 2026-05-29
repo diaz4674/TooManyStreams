@@ -75,7 +75,7 @@ export default function AddStreamDialog({
 		<div
 			ref={backdropRef}
 			onClick={handleBackdropClick}
-			className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 backdrop-blur-sm p-4"
+			className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/75 backdrop-blur-sm p-4"
 		>
 			<div className="w-[min(44rem,calc(100vw-2rem))] border border-slate-400/20 rounded-[1.4rem] bg-slate-900/95 text-slate-50 shadow-[0_30px_70px_rgba(0,0,0,0.45)]">
 				<form onSubmit={handleSubmit} className="grid gap-5 p-5">
@@ -164,7 +164,7 @@ export default function AddStreamDialog({
 									<Virtuoso
 										data={matchingExistingStreams}
 										itemContent={(_, stream) => (
-											<div className="pb-2 last:pb-0">
+											<div className="pb-2 last:pb-0 my-3">
 												<button
 													type="button"
 													onClick={() => {

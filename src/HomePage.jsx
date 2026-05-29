@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { useShallow } from "zustand/react/shallow"
 import Header from "./components/Header"
 import StreamGrid from "./components/StreamGrid"
@@ -17,6 +17,13 @@ import {
 	sampleStreams,
 } from "./store"
 import {
+	buildSharedProjectPayload,
+	decodeSharedProjectPayload,
+	encodeSharedProjectPayload,
+	importSharedProject as importSharedProjectState,
+	SHARED_PROJECT_QUERY_PARAM,
+} from "./shareProject"
+import {
 	consumeTwitchOAuthCallback,
 	fetchLiveTwitchChannelNames,
 	getStoredTwitchSession,
@@ -25,9 +32,41 @@ import { useWallStore } from "./wallStore"
 
 const LIVE_STATUS_REFRESH_MS = 60 * 1000
 const EMPTY_LIVE_CHANNEL_NAMES = new Set()
+const SHARED_PROJECT_IMPORT_ERROR_MESSAGE =
+	"Could not import that shared project link. It may be invalid or unsupported."
 
 function getStreamKey(platform, channelName) {
 	return `${platform}:${channelName.trim().toLowerCase()}`
+}
+
+function buildSharedProjectUrl(encodedPayload) {
+	if (typeof window === "undefined") {
+		return ""
+	}
+
+	const url = new URL(window.location.href)
+	url.search = ""
+	url.hash = ""
+	url.searchParams.set(SHARED_PROJECT_QUERY_PARAM, encodedPayload)
+	return url.toString()
+}
+
+function clearSharedProjectParamFromUrl() {
+	if (typeof window === "undefined") {
+		return
+	}
+
+	const url = new URL(window.location.href)
+	if (!url.searchParams.has(SHARED_PROJECT_QUERY_PARAM)) {
+		return
+	}
+
+	url.searchParams.delete(SHARED_PROJECT_QUERY_PARAM)
+	window.history.replaceState(
+		window.history.state,
+		"",
+		`${url.pathname}${url.search}${url.hash}`,
+	)
 }
 
 function areTwitchSessionsEqual(left, right) {
@@ -394,6 +433,8 @@ function viewerReducer(state, action) {
 					? project
 					: nextProject
 			})
+		case "importSharedProject":
+			return importSharedProjectState(state, action.payload)
 		default:
 			return state
 	}
@@ -412,11 +453,18 @@ export default function HomePage() {
 		getStoredTwitchSession(),
 	)
 	const [twitchConnectionMessage, setTwitchConnectionMessage] = useState("")
+	const [shareFeedback, setShareFeedback] = useState({
+		projectId: "",
+		tone: "",
+		message: "",
+	})
+	const [shareImportError, setShareImportError] = useState("")
 	const [searchPreviewStream, setSearchPreviewStream] = useState(null)
 	const [liveTwitchSnapshot, setLiveTwitchSnapshot] = useState({
 		projectId: "",
 		channelNames: EMPTY_LIVE_CHANNEL_NAMES,
 	})
+	const shareImportHandledRef = useRef(false)
 
 	const activeProject = getActiveProject(viewerState)
 	const activeTwitchChannelNames = useMemo(
@@ -522,6 +570,32 @@ export default function HomePage() {
 	}, [viewerState])
 
 	useEffect(() => {
+		if (shareImportHandledRef.current || typeof window === "undefined") {
+			return
+		}
+
+		shareImportHandledRef.current = true
+		const encodedPayload = new URLSearchParams(window.location.search).get(
+			SHARED_PROJECT_QUERY_PARAM,
+		)
+		if (!encodedPayload) {
+			return
+		}
+
+		try {
+			dispatch({
+				type: "importSharedProject",
+				payload: decodeSharedProjectPayload(encodedPayload),
+			})
+			setShareImportError("")
+		} catch {
+			setShareImportError(SHARED_PROJECT_IMPORT_ERROR_MESSAGE)
+		} finally {
+			clearSharedProjectParamFromUrl()
+		}
+	}, [])
+
+	useEffect(() => {
 		const callback = consumeTwitchOAuthCallback()
 		if (callback.error) {
 			setTwitchConnectionMessage(callback.error)
@@ -625,6 +699,53 @@ export default function HomePage() {
 	const deleteProject = useCallback((projectId) => {
 		dispatch({ type: "deleteProject", projectId })
 	}, [])
+
+	const shareProject = useCallback(
+		async (projectId) => {
+			const project = viewerState.projects.find((entry) => entry.id === projectId)
+			if (!project) {
+				return
+			}
+
+			let shareUrl = ""
+			try {
+				shareUrl = buildSharedProjectUrl(
+					encodeSharedProjectPayload(
+						buildSharedProjectPayload(project, viewerState.streamsById),
+					),
+				)
+			} catch {
+				setShareFeedback({
+					projectId,
+					tone: "error",
+					message: "Could not create a share link for this project.",
+				})
+				return
+			}
+
+			try {
+				if (!navigator.clipboard?.writeText) {
+					throw new Error("Clipboard API unavailable.")
+				}
+
+				await navigator.clipboard.writeText(shareUrl)
+				setShareFeedback({
+					projectId,
+					tone: "success",
+					message: "Share link copied to your clipboard.",
+				})
+			} catch {
+				window.prompt("Copy this share link:", shareUrl)
+				setShareFeedback({
+					projectId,
+					tone: "error",
+					message:
+						"Clipboard access was blocked, so a manual copy dialog was opened.",
+				})
+			}
+		},
+		[viewerState.projects, viewerState.streamsById],
+	)
 
 	const addExistingStreamToProject = useCallback(
 		(streamId) => {
@@ -853,6 +974,21 @@ export default function HomePage() {
 						: "min-h-screen w-full p-6 max-md:p-4"
 				}
 			>
+				{shareImportError && (
+					<div className="fixed inset-x-0 top-4 z-[80] flex justify-center px-4">
+						<div className="flex w-full max-w-2xl items-center justify-between gap-3 rounded-2xl border border-rose-300/24 bg-slate-950/94 px-4 py-3 text-sm text-slate-100 shadow-[0_18px_40px_rgba(15,23,42,0.4)] backdrop-blur">
+							<p className="m-0">{shareImportError}</p>
+							<button
+								type="button"
+								onClick={() => setShareImportError("")}
+								className="rounded-full border-0 bg-white/10 px-3 py-1.5 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-white transition-colors cursor-pointer hover:bg-white/14"
+							>
+								Dismiss
+							</button>
+						</div>
+					</div>
+				)}
+
 				{!isMatrixMode && (
 					<Header
 						projectCount={viewerState.projects.length}
@@ -1071,7 +1207,9 @@ export default function HomePage() {
 						onCreateProject={createProject}
 						onOpenProject={openProject}
 						onRenameProject={renameProject}
+						onShareProject={shareProject}
 						onDeleteProject={deleteProject}
+						shareFeedback={shareFeedback}
 					/>
 				)}
 			</main>

@@ -43,7 +43,7 @@ export default function EditStreamDialog({ stream, onClose, onSave }) {
 		<div
 			ref={backdropRef}
 			onClick={handleBackdropClick}
-			className="fixed inset-0 z-[90] grid place-items-center bg-slate-950/75 p-4 backdrop-blur-sm"
+			className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/75 p-4 backdrop-blur-sm"
 		>
 			<div className="w-[min(38rem,calc(100vw-2rem))] rounded-[1.4rem] border border-slate-400/20 bg-slate-900/95 text-slate-50 shadow-[0_30px_70px_rgba(0,0,0,0.45)]">
 				<form onSubmit={handleSubmit} className="grid gap-5 p-5">
