@@ -5,7 +5,7 @@ import { isStreamChatCapable } from "../utils"
 
 const TWITCH_CARD_AUTOPLAY_THRESHOLD = 0.6
 const APP_RESUME_DEDUP_WINDOW_MS = 400
-const CINEMA_PRIMARY_AUTOPLAY_RETRY_DELAYS_MS = [0, 320, 900, 1700]
+const CINEMA_PRIMARY_AUTOPLAY_RETRY_DELAYS_MS = [0, 320, 900, 1700, 2600, 3800]
 
 function PlatformLogo({ platform }) {
 	if (platform === "twitch") {

@@ -6,10 +6,9 @@ let youtubeSdkPromise
 const EMBED_ASPECT_RATIO = 16 / 9
 const TWITCH_MIN_AUTOPLAY_WIDTH_PX = 400
 const TWITCH_MIN_AUTOPLAY_HEIGHT_PX = 300
-const TWITCH_PLAYBACK_RECOVERY_WINDOW_MS = 1600
+const TWITCH_PLAYBACK_RECOVERY_WINDOW_MS = 4500
 const TWITCH_PLAYBACK_RETRY_DELAY_MS = 250
 const TWITCH_TAB_RESUME_RETRY_DELAYS_MS = [0, 320, 900, 1700]
-const TWITCH_TAB_RESUME_REBUILD_FALLBACK_DELAY_MS = 2800
 const YOUTUBE_READY_TIMEOUT_MS = 7000
 const YOUTUBE_RECOVERY_RETRY_DELAYS_MS = [0, 320, 900, 1700]
 const YOUTUBE_REBUILD_FALLBACK_DELAY_MS = 2800
@@ -196,14 +195,13 @@ function TwitchEmbed({
 	onReady,
 	loadSessionKey,
 }) {
-	const [playerBuildKey, setPlayerBuildKey] = useState(0)
+	const playerBuildKey = 0
 	const playerId = `twitch-player-${stream.id}-${playerBuildKey}`
 	const containerRef = useRef(null)
 	const playerRef = useRef(null)
 	const readyRef = useRef(false)
 	const mutedRef = useRef(muted)
 	const playbackTokenRef = useRef(playbackToken)
-	const builtAtEligibleSizeRef = useRef(false)
 	const pendingPlaybackRef = useRef({
 		token: 0,
 		deadline: 0,
@@ -211,16 +209,14 @@ function TwitchEmbed({
 	const resumePlaybackTokenRef = useRef(0)
 	const resumeAttemptIdRef = useRef(0)
 	const resumeRetryTimeoutsRef = useRef([])
-	const resumeRebuildTimeoutRef = useRef(null)
 	const retryTimeoutRef = useRef(null)
 	const [sdkFailed, setSdkFailed] = useState(false)
 	const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+	const containerSizeRef = useRef(containerSize)
 	const readySignalSentRef = useRef(false)
 	mutedRef.current = muted
 	playbackTokenRef.current = playbackToken
-	const meetsAutoplaySizeRequirement =
-		containerSize.width >= TWITCH_MIN_AUTOPLAY_WIDTH_PX &&
-		containerSize.height >= TWITCH_MIN_AUTOPLAY_HEIGHT_PX
+	containerSizeRef.current = containerSize
 	const iframeSrc = getEmbedSrc(stream, {
 		muted,
 		autoplay: shouldAutoplay,
@@ -238,6 +234,28 @@ function TwitchEmbed({
 		readySignalSentRef.current = true
 		onReady?.(stream.id, loadSessionKey)
 	}, [loadSessionKey, onReady, stream.id])
+
+	const syncPlayerFrame = useCallback(() => {
+		const iframe = containerRef.current?.querySelector("iframe")
+		if (!iframe) {
+			return
+		}
+
+		const nextSize = containerSizeRef.current
+		iframe.width = String(
+			Math.max(TWITCH_MIN_AUTOPLAY_WIDTH_PX, Math.round(nextSize.width || 0)),
+		)
+		iframe.height = String(
+			Math.max(
+				TWITCH_MIN_AUTOPLAY_HEIGHT_PX,
+				Math.round(nextSize.height || 0),
+			),
+		)
+		iframe.style.display = "block"
+		iframe.style.width = "100%"
+		iframe.style.height = "100%"
+		iframe.style.border = "0"
+	}, [])
 
 	useEffect(() => {
 		const node = containerRef.current
@@ -280,8 +298,6 @@ function TwitchEmbed({
 			window.clearTimeout(timeoutId)
 		}
 		resumeRetryTimeoutsRef.current = []
-		window.clearTimeout(resumeRebuildTimeoutRef.current)
-		resumeRebuildTimeoutRef.current = null
 	}, [])
 
 	const schedulePendingPlaybackCheck = useCallback(
@@ -356,21 +372,19 @@ function TwitchEmbed({
 				}
 
 				Twitch = loadedTwitch
-				builtAtEligibleSizeRef.current = meetsAutoplaySizeRequirement
 				player = new Twitch.Player(playerId, {
 					autoplay: shouldAutoplay,
 					channel: stream.channelName,
-					height: meetsAutoplaySizeRequirement
-						? Math.max(
-								TWITCH_MIN_AUTOPLAY_HEIGHT_PX,
-								containerSize.height,
-							)
-						: "100%",
+					height: Math.max(
+						TWITCH_MIN_AUTOPLAY_HEIGHT_PX,
+						Math.round(containerSize.height || 0),
+					),
 					muted: mutedRef.current,
 					parent: [getTwitchParent()],
-					width: meetsAutoplaySizeRequirement
-						? Math.max(TWITCH_MIN_AUTOPLAY_WIDTH_PX, containerSize.width)
-						: "100%",
+					width: Math.max(
+						TWITCH_MIN_AUTOPLAY_WIDTH_PX,
+						Math.round(containerSize.width || 0),
+					),
 				})
 				playerRef.current = player
 				handleReady = () => {
@@ -380,6 +394,7 @@ function TwitchEmbed({
 
 					readyRef.current = true
 					player.setMuted(Boolean(mutedRef.current))
+					syncPlayerFrame()
 					notifyReady()
 
 					if (playbackTokenRef.current > 0) {
@@ -387,10 +402,7 @@ function TwitchEmbed({
 					}
 				}
 				handlePlaying = () => {
-					if (
-						pendingPlaybackRef.current.token > 0 &&
-						Date.now() >= pendingPlaybackRef.current.deadline
-					) {
+					if (pendingPlaybackRef.current.token > 0) {
 						clearPendingPlaybackRequest()
 					}
 				}
@@ -450,14 +462,12 @@ function TwitchEmbed({
 	}, [
 		clearPendingPlaybackRequest,
 		clearResumeRetryRequests,
-		containerSize.height,
-		containerSize.width,
-		meetsAutoplaySizeRequirement,
 		notifyReady,
 		playerId,
 		shouldAutoplay,
 		startPendingPlaybackRequest,
 		stream.channelName,
+		syncPlayerFrame,
 	])
 
 	useEffect(() => {
@@ -510,23 +520,6 @@ function TwitchEmbed({
 						)
 					}, delayMs),
 			)
-
-			resumeRebuildTimeoutRef.current = window.setTimeout(() => {
-				if (
-					document.visibilityState !== "visible" ||
-					attemptId !== resumeAttemptIdRef.current ||
-					!readyRef.current
-				) {
-					return
-				}
-
-				const player = playerRef.current
-				if (!player || !player.isPaused?.()) {
-					return
-				}
-
-				setPlayerBuildKey((key) => key + 1)
-			}, TWITCH_TAB_RESUME_REBUILD_FALLBACK_DELAY_MS)
 		}
 
 		const handleVisibilityChange = () => {
@@ -555,16 +548,12 @@ function TwitchEmbed({
 	])
 
 	useEffect(() => {
-		if (
-			playbackToken <= 0 ||
-			!meetsAutoplaySizeRequirement ||
-			builtAtEligibleSizeRef.current
-		) {
+		if (!readyRef.current) {
 			return
 		}
 
-		setPlayerBuildKey((key) => key + 1)
-	}, [meetsAutoplaySizeRequirement, playbackToken])
+		syncPlayerFrame()
+	}, [containerSize.height, containerSize.width, syncPlayerFrame])
 
 	return (
 		<div
