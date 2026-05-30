@@ -16,6 +16,7 @@ import loaderSrc from "../../assets/loader.png"
 import StreamCard from "./StreamCard"
 import StreamPlayer from "./StreamPlayer"
 import StreamChatSidebar from "./StreamChatSidebar"
+import { buildDuoFocusLayout, getFocusCanvas } from "../focusLayouts"
 import { getWallLayout, isStreamChatCapable } from "../utils"
 import { AUTO_WALL_GAP_PX, STREAM_CARD_CHROME_PX } from "../layoutUtils"
 import { useWallStore } from "../wallStore"
@@ -29,11 +30,8 @@ const INLINE_CHAT_ADDED_HEIGHT_PX =
 const FOCUS_WIDE_MIN_WIDTH_PX = 1280
 const FOCUS_WIDE_MIN_HEIGHT_PX = 720
 const FOCUS_MAX_STREAMS = 5
-const FOCUS_OVERLAY_PADDING_PX = 24
-const FOCUS_OVERLAY_SMALL_PADDING_PX = 16
 const FOCUS_OVERLAY_GAP_PX = 16
 const FOCUS_STACKED_MIN_COMPANION_HEIGHT_PX = 148
-const FOCUS_TOOLBAR_OFFSET_PX = 68
 const FOCUS_TRANSITION_DURATION_MS = 320
 const FOCUS_OPACITY_TRANSITION_DURATION_MS = 220
 const FOCUS_CHAT_DRAWER_GAP_PX = 24
@@ -113,24 +111,6 @@ function getFocusCardProps({
 			focusFrame.role === "companion"
 				? () => onRemoveFocusCompanion(streamId)
 				: undefined,
-	}
-}
-
-function getFocusCanvas(viewportWidth, viewportHeight) {
-	const padding =
-		viewportWidth >= FOCUS_WIDE_MIN_WIDTH_PX
-			? FOCUS_OVERLAY_PADDING_PX
-			: FOCUS_OVERLAY_SMALL_PADDING_PX
-	const left = padding
-	const top = padding + FOCUS_TOOLBAR_OFFSET_PX
-	const width = Math.max(320, viewportWidth - padding * 2)
-	const height = Math.max(240, viewportHeight - top - padding)
-
-	return {
-		left,
-		top,
-		width,
-		height,
 	}
 }
 
@@ -683,6 +663,8 @@ function FocusOverlayChrome({
 	showLayoutControls = true,
 	showChatControls = true,
 	showEmptySlots = true,
+	allowCompactEmptySlots = false,
+	renderFloatingChat = true,
 	badgeLabel = "Cinema Mode",
 	secondaryAction = null,
 	primaryAction = null,
@@ -886,6 +868,17 @@ function FocusOverlayChrome({
 							</button>
 							<button
 								type="button"
+								onClick={() => onSetFocusLayout("duo")}
+								className={`rounded-full px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+									focusLayout === "duo"
+										? "bg-cyan-400/18 text-cyan-50"
+										: "text-slate-200/78 hover:bg-white/8"
+								}`}
+							>
+								Duo
+							</button>
+							<button
+								type="button"
 								onClick={() => onSetFocusLayout("stacked")}
 								className={`rounded-full px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
 									focusLayout === "stacked"
@@ -974,7 +967,7 @@ function FocusOverlayChrome({
 				)}
 
 			{showEmptySlots &&
-				hasMultiFocusExperience &&
+				(hasMultiFocusExperience || allowCompactEmptySlots) &&
 				emptySlotStyles.map((style, index) => (
 					<FocusAddSlot
 						key={`focus-slot-${index}`}
@@ -984,7 +977,10 @@ function FocusOverlayChrome({
 					/>
 				))}
 
-			{showChatControls && focusChatOpen && focusedChatStreams.length > 0 && (
+			{renderFloatingChat &&
+				showChatControls &&
+				focusChatOpen &&
+				focusedChatStreams.length > 0 && (
 				<div
 					className="pointer-events-none fixed z-[85]"
 					style={{
@@ -1151,8 +1147,8 @@ function FocusOverlayChrome({
 							</svg>
 						</div>
 					</div>
-				</div>
-			)}
+					</div>
+				)}
 		</>
 	)
 }
@@ -1281,6 +1277,36 @@ function SingleFocusChatRail({ stream, frame }) {
 				streams={[stream]}
 				activeStreamId={stream.id}
 				variant="overlay"
+			/>
+		</div>
+	)
+}
+
+function DuoFocusChatRail({
+	streams,
+	activeStreamId,
+	frame,
+	onSelectStream,
+}) {
+	if (!frame || streams.length === 0) {
+		return null
+	}
+
+	return (
+		<div
+			className="pointer-events-auto fixed z-[72]"
+			style={{
+				left: frame.left,
+				top: frame.top,
+				width: frame.width,
+				height: frame.height,
+			}}
+		>
+			<StreamChatSidebar
+				streams={streams}
+				activeStreamId={activeStreamId}
+				onSelectStream={onSelectStream}
+				variant="duoCenter"
 			/>
 		</div>
 	)
@@ -1459,6 +1485,7 @@ function SortableStreamCard({
 				dragHandleAttributes={attributes}
 				dragHandleListeners={listeners}
 				fluidVideo={isInFocusComposition}
+				preserveFullFrame={Boolean(focusFrame?.preserveFullFrame)}
 				isDragging={isDragging}
 				canManageStreamMembership={canManageStreamMembership}
 				canReorderStreamMembership={canReorderStreamMembership}
@@ -1842,6 +1869,7 @@ export default function StreamGrid({
 	const hasPreviewOverlay = Boolean(previewStream)
 	const hasOverlayPresentation = hasActiveFocus || hasPreviewOverlay
 	const isSingleFocusLayout = focusLayout === "single"
+	const isDuoFocusLayout = focusLayout === "duo"
 	const isStackedFocusLayout = focusLayout === "stacked"
 	const hasMultiFocusExperience =
 		containerSize.viewportWidth >= FOCUS_WIDE_MIN_WIDTH_PX &&
@@ -1861,9 +1889,38 @@ export default function StreamGrid({
 			isSingleFocusLayout,
 		],
 	)
+	const duoFocusLayout = useMemo(
+		() =>
+			isDuoFocusLayout && hasActiveFocus
+				? buildDuoFocusLayout({
+						viewportWidth: containerSize.viewportWidth,
+						viewportHeight: containerSize.viewportHeight,
+						showChatRail:
+							focusChatOpen &&
+							focusedStreamIds.length > 0 &&
+							streams.some(
+								(stream) =>
+									focusedStreamIds.includes(stream.id) &&
+									isStreamChatCapable(stream),
+							),
+					})
+				: null,
+		[
+			containerSize.viewportHeight,
+			containerSize.viewportWidth,
+			focusChatOpen,
+			focusedStreamIds,
+			hasActiveFocus,
+			isDuoFocusLayout,
+			streams,
+		],
+	)
 	const hasSingleFocusRail = Boolean(singleFocusLayout?.chatFrame)
+	const hasDuoChatRail = Boolean(duoFocusLayout?.chatFrame)
 	const visibleFocusedStreamIds =
-		hasMultiFocusExperience && !isSingleFocusLayout
+		isDuoFocusLayout
+			? focusedStreamIds.slice(0, 2)
+			: hasMultiFocusExperience && !isSingleFocusLayout
 			? focusedStreamIds
 			: focusedStreamIds.slice(0, 1)
 	const hiddenCompanionCount = Math.max(
@@ -1881,10 +1938,18 @@ export default function StreamGrid({
 	)
 	const availableCompanionStreams = useMemo(
 		() =>
-			hasMultiFocusExperience && !isSingleFocusLayout
+			isDuoFocusLayout
+				? streams.filter((stream) => !focusedStreamIdSet.has(stream.id))
+				: hasMultiFocusExperience && !isSingleFocusLayout
 				? streams.filter((stream) => !focusedStreamIdSet.has(stream.id))
 				: [],
-		[focusedStreamIdSet, hasMultiFocusExperience, isSingleFocusLayout, streams],
+		[
+			focusedStreamIdSet,
+			hasMultiFocusExperience,
+			isDuoFocusLayout,
+			isSingleFocusLayout,
+			streams,
+		],
 	)
 	const stackedRightRailMaxSlots = useMemo(
 		() =>
@@ -1928,7 +1993,9 @@ export default function StreamGrid({
 	const focusSlotCount =
 		visibleFocusedStreamIds.length === 0
 			? 0
-			: isSingleFocusLayout
+			: isDuoFocusLayout
+				? 2
+				: isSingleFocusLayout
 				? 1
 				: isStackedFocusLayout
 					? stackedFocusSlotCount
@@ -1948,6 +2015,10 @@ export default function StreamGrid({
 			return singleFocusLayout?.videoFrame ? [singleFocusLayout.videoFrame] : []
 		}
 
+		if (isDuoFocusLayout) {
+			return duoFocusLayout?.slotFrames ?? []
+		}
+
 		return buildFocusSlotStyles({
 			focusLayout,
 			slotCount: focusSlotCount,
@@ -1959,6 +2030,8 @@ export default function StreamGrid({
 		containerSize.viewportWidth,
 		focusLayout,
 		focusSlotCount,
+		duoFocusLayout,
+		isDuoFocusLayout,
 		isSingleFocusLayout,
 		isStackedFocusLayout,
 		singleFocusLayout,
@@ -1974,16 +2047,22 @@ export default function StreamGrid({
 							...focusSlotStyles[index],
 							role: index === 0 ? "primary" : "companion",
 							placement:
-								index === 0
+								isDuoFocusLayout
+									? index === 0
+										? "left"
+										: "right"
+									: index === 0
 									? "primary"
 									: isStackedFocusLayout && index > stackedRightRailMaxSlots
 										? "bottom"
 										: "rail",
+							preserveFullFrame: isDuoFocusLayout,
 						},
 					]),
 			),
 		[
 			focusSlotStyles,
+			isDuoFocusLayout,
 			isStackedFocusLayout,
 			stackedRightRailMaxSlots,
 			visibleFocusedStreamIds,
@@ -2088,6 +2167,8 @@ export default function StreamGrid({
 						onClearFocus={onClearFocus}
 						showChatControls={!hasSingleFocusRail}
 						showEmptySlots={!isSingleFocusLayout}
+						allowCompactEmptySlots={isDuoFocusLayout}
+						renderFloatingChat={!hasDuoChatRail}
 						secondaryAction={
 							canRevealStackedOverflow
 								? {
@@ -2102,6 +2183,14 @@ export default function StreamGrid({
 						<SingleFocusChatRail
 							stream={primaryFocusedStream}
 							frame={singleFocusLayout?.chatFrame ?? null}
+						/>
+					)}
+					{hasDuoChatRail && (
+						<DuoFocusChatRail
+							streams={focusedChatStreams}
+							activeStreamId={effectiveFocusChatStreamId}
+							frame={duoFocusLayout?.chatFrame ?? null}
+							onSelectStream={onSetFocusChatStream}
 						/>
 					)}
 				</>

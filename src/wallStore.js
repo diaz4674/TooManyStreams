@@ -2,7 +2,7 @@ import { create } from "zustand"
 
 const DEFAULT_FOCUS_LAYOUT = "single"
 const MAX_FOCUSED_STREAMS = 5
-const VALID_FOCUS_LAYOUTS = new Set(["single", "stacked", "equal"])
+const VALID_FOCUS_LAYOUTS = new Set(["single", "stacked", "equal", "duo"])
 
 function uniqueIds(ids) {
 	return [...new Set(ids.filter((id) => typeof id === "string" && id))]
@@ -56,6 +56,14 @@ function isValidFocusLayout(layout) {
 	return VALID_FOCUS_LAYOUTS.has(layout)
 }
 
+function getFocusStreamLimit(layout) {
+	return layout === "duo" ? 2 : MAX_FOCUSED_STREAMS
+}
+
+function normalizeFocusedStreamIdsForLayout(focusedStreamIds, layout) {
+	return uniqueIds(focusedStreamIds).slice(0, getFocusStreamLimit(layout))
+}
+
 function getFocusedChatCapableStreamIds(focusedStreamIds, chatCapableStreamIds) {
 	return focusedStreamIds.filter((streamId) =>
 		chatCapableStreamIds.includes(streamId),
@@ -94,6 +102,39 @@ function getNextFocusChatStreamId({
 	return focusedChatCapableStreamIds[0]
 }
 
+function normalizeFocusState({
+	focusedStreamIds,
+	focusLayout,
+	chatCapableStreamIds,
+	currentChatStreamId = null,
+	preferredChatStreamId = null,
+	focusChatOpen = false,
+}) {
+	const nextFocusLayout =
+		focusedStreamIds.length > 0 && isValidFocusLayout(focusLayout)
+			? focusLayout
+			: DEFAULT_FOCUS_LAYOUT
+	const nextFocusedStreamIds = normalizeFocusedStreamIdsForLayout(
+		focusedStreamIds,
+		nextFocusLayout,
+	)
+	const nextFocusChatStreamId = getNextFocusChatStreamId({
+		focusedStreamIds: nextFocusedStreamIds,
+		chatCapableStreamIds,
+		preferredStreamId: preferredChatStreamId,
+		currentChatStreamId,
+	})
+
+	return {
+		focusedStreamIds: nextFocusedStreamIds,
+		focusLayout: nextFocusedStreamIds.length
+			? nextFocusLayout
+			: DEFAULT_FOCUS_LAYOUT,
+		focusChatOpen: nextFocusChatStreamId ? focusChatOpen : false,
+		focusChatStreamId: nextFocusChatStreamId,
+	}
+}
+
 export const useWallStore = create((set) => ({
 	projectId: "",
 	orderedStreamIds: [],
@@ -125,28 +166,17 @@ export const useWallStore = create((set) => ({
 				? state.expandedCardChatStreamId
 				: null
 			const projectDidChange = state.projectId !== projectId
-			const nextFocusedStreamIds = projectDidChange
-				? []
-				: uniqueIds(state.focusedStreamIds)
-						.filter((id) => nextOrderedIds.includes(id))
-						.slice(0, MAX_FOCUSED_STREAMS)
-			const nextFocusChatStreamId = projectDidChange
-				? null
-				: getNextFocusChatStreamId({
-						focusedStreamIds: nextFocusedStreamIds,
+			const nextFocusState = projectDidChange
+				? getDefaultFocusState()
+				: normalizeFocusState({
+						focusedStreamIds: state.focusedStreamIds.filter((id) =>
+							nextOrderedIds.includes(id),
+						),
+						focusLayout: state.focusLayout,
 						chatCapableStreamIds: nextChatCapableIds,
 						currentChatStreamId: state.focusChatStreamId,
+						focusChatOpen: state.focusChatOpen,
 					})
-			const nextFocusChatOpen = nextFocusChatStreamId
-				? projectDidChange
-					? false
-					: state.focusChatOpen
-				: false
-			const nextFocusLayout =
-				nextFocusedStreamIds.length > 0 &&
-				isValidFocusLayout(state.focusLayout)
-					? state.focusLayout
-					: DEFAULT_FOCUS_LAYOUT
 			const nextStreamVolumes = Object.fromEntries(
 				Object.entries(state.streamVolumes).filter(([id]) =>
 					nextOrderedIds.includes(id),
@@ -162,10 +192,13 @@ export const useWallStore = create((set) => ({
 				state.chatOpen === nextChatOpen &&
 				state.activeChatStreamId === nextActiveChatStreamId &&
 				state.expandedCardChatStreamId === nextExpandedCardChatStreamId &&
-				arraysEqual(state.focusedStreamIds, nextFocusedStreamIds) &&
-				state.focusLayout === nextFocusLayout &&
-				state.focusChatOpen === nextFocusChatOpen &&
-				state.focusChatStreamId === nextFocusChatStreamId &&
+				arraysEqual(
+					state.focusedStreamIds,
+					nextFocusState.focusedStreamIds,
+				) &&
+				state.focusLayout === nextFocusState.focusLayout &&
+				state.focusChatOpen === nextFocusState.focusChatOpen &&
+				state.focusChatStreamId === nextFocusState.focusChatStreamId &&
 				objectKeysEqual(state.streamVolumes, nextStreamVolumes)
 			) {
 				return state
@@ -179,10 +212,7 @@ export const useWallStore = create((set) => ({
 				chatOpen: nextChatOpen,
 				activeChatStreamId: nextActiveChatStreamId,
 				expandedCardChatStreamId: nextExpandedCardChatStreamId,
-				focusedStreamIds: nextFocusedStreamIds,
-				focusLayout: nextFocusLayout,
-				focusChatOpen: nextFocusChatOpen,
-				focusChatStreamId: nextFocusChatStreamId,
+				...nextFocusState,
 				streamVolumes: nextStreamVolumes,
 			}
 		})
@@ -240,9 +270,8 @@ export const useWallStore = create((set) => ({
 
 			return {
 				...state,
+				...getDefaultFocusState(),
 				focusedStreamIds: nextFocusedStreamIds,
-				focusLayout: DEFAULT_FOCUS_LAYOUT,
-				focusChatOpen: false,
 				focusChatStreamId: getNextFocusChatStreamId({
 					focusedStreamIds: nextFocusedStreamIds,
 					chatCapableStreamIds: state.chatCapableStreamIds,
@@ -257,22 +286,24 @@ export const useWallStore = create((set) => ({
 				!state.focusedStreamIds.length ||
 				state.focusedStreamIds.includes(streamId) ||
 				!state.orderedStreamIds.includes(streamId) ||
-				state.focusedStreamIds.length >= MAX_FOCUSED_STREAMS
+				state.focusedStreamIds.length >=
+					getFocusStreamLimit(state.focusLayout)
 			) {
 				return state
 			}
 
-			const nextFocusedStreamIds = [...state.focusedStreamIds, streamId]
+			const nextFocusState = normalizeFocusState({
+				focusedStreamIds: [...state.focusedStreamIds, streamId],
+				focusLayout: state.focusLayout,
+				chatCapableStreamIds: state.chatCapableStreamIds,
+				currentChatStreamId: state.focusChatStreamId,
+				preferredChatStreamId: streamId,
+				focusChatOpen: state.focusChatOpen,
+			})
 
 			return {
 				...state,
-				focusedStreamIds: nextFocusedStreamIds,
-				focusChatStreamId: getNextFocusChatStreamId({
-					focusedStreamIds: nextFocusedStreamIds,
-					chatCapableStreamIds: state.chatCapableStreamIds,
-					preferredStreamId: streamId,
-					currentChatStreamId: state.focusChatStreamId,
-				}),
+				...nextFocusState,
 			}
 		})
 	},
@@ -286,25 +317,17 @@ export const useWallStore = create((set) => ({
 				return state
 			}
 
-			const nextFocusedStreamIds = state.focusedStreamIds.filter(
-				(id) => id !== streamId,
-			)
-			const nextFocusChatStreamId = getNextFocusChatStreamId({
-				focusedStreamIds: nextFocusedStreamIds,
+			const nextFocusState = normalizeFocusState({
+				focusedStreamIds: state.focusedStreamIds.filter((id) => id !== streamId),
+				focusLayout: state.focusLayout,
 				chatCapableStreamIds: state.chatCapableStreamIds,
 				currentChatStreamId: state.focusChatStreamId,
+				focusChatOpen: state.focusChatOpen,
 			})
 
 			return {
 				...state,
-				focusedStreamIds: nextFocusedStreamIds,
-				focusLayout:
-					nextFocusedStreamIds.length > 0 &&
-					isValidFocusLayout(state.focusLayout)
-						? state.focusLayout
-						: DEFAULT_FOCUS_LAYOUT,
-				focusChatOpen: nextFocusChatStreamId ? state.focusChatOpen : false,
-				focusChatStreamId: nextFocusChatStreamId,
+				...nextFocusState,
 			}
 		})
 	},
@@ -318,28 +341,38 @@ export const useWallStore = create((set) => ({
 				streamId,
 				...state.focusedStreamIds.filter((id) => id !== streamId),
 			]
+			const nextFocusState = normalizeFocusState({
+				focusedStreamIds: nextFocusedStreamIds,
+				focusLayout: state.focusLayout,
+				chatCapableStreamIds: state.chatCapableStreamIds,
+				currentChatStreamId: state.focusChatStreamId,
+				preferredChatStreamId: streamId,
+				focusChatOpen: state.focusChatOpen,
+			})
 
 			return {
 				...state,
-				focusedStreamIds: nextFocusedStreamIds,
-				focusChatStreamId: getNextFocusChatStreamId({
-					focusedStreamIds: nextFocusedStreamIds,
-					chatCapableStreamIds: state.chatCapableStreamIds,
-					preferredStreamId: streamId,
-					currentChatStreamId: state.focusChatStreamId,
-				}),
+				...nextFocusState,
 			}
 		})
 	},
 	setFocusLayout(layout) {
-		set((state) =>
-			!isValidFocusLayout(layout)
-				? state
-				: {
-						...state,
-						focusLayout: layout,
-					},
-		)
+		set((state) => {
+			if (!isValidFocusLayout(layout)) {
+				return state
+			}
+
+			return {
+				...state,
+				...normalizeFocusState({
+					focusedStreamIds: state.focusedStreamIds,
+					focusLayout: layout,
+					chatCapableStreamIds: state.chatCapableStreamIds,
+					currentChatStreamId: state.focusChatStreamId,
+					focusChatOpen: state.focusChatOpen,
+				}),
+			}
+		})
 	},
 	toggleFocusChat() {
 		set((state) => {

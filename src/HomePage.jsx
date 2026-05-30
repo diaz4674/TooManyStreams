@@ -1179,6 +1179,29 @@ export default function HomePage() {
 				)}
 
 				{!isMatrixMode && <HomepageSeoSections />}
+				{!isMatrixMode && (
+					<section className="mt-8 rounded-[1.75rem] border border-cyan-400/14 bg-slate-950/50 px-6 py-8 shadow-[0_24px_60px_rgba(8,15,35,0.3)]">
+						<div className="mx-auto flex max-w-3xl flex-col items-center gap-3 text-center">
+							<p className="m-0 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-cyan-200/80">
+								Contact Me
+							</p>
+							<h2 className="m-0 text-2xl font-semibold text-white">
+								Questions, ideas, or feedback?
+							</h2>
+							<p className="m-0 text-sm text-slate-300/80">
+								Reach out anytime and I&apos;ll get back to you as soon as I
+								can.
+							</p>
+							<a
+								href="mailto:brnt.marshmllow@gmail.com"
+								className="inline-flex items-center gap-2 rounded-full bg-cyan-400/16 px-5 py-2.5 text-sm font-semibold text-cyan-50 shadow-[0_0_0_1px_rgba(34,211,238,0.18)] transition-colors hover:bg-cyan-400/24"
+							>
+								<i className="fa-solid fa-envelope" />
+								brnt.marshmllow@gmail.com
+							</a>
+						</div>
+					</section>
+				)}
 
 				{dialogOpen && (
 					<AddStreamDialog

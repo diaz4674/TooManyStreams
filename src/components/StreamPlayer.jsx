@@ -6,7 +6,7 @@ let youtubeSdkPromise
 const EMBED_ASPECT_RATIO = 16 / 9
 const TWITCH_MIN_AUTOPLAY_WIDTH_PX = 400
 const TWITCH_MIN_AUTOPLAY_HEIGHT_PX = 300
-const TWITCH_PLAYBACK_RECOVERY_WINDOW_MS = 4500
+const TWITCH_PLAYBACK_RECOVERY_WINDOW_MS = 12000
 const TWITCH_PLAYBACK_RETRY_DELAY_MS = 250
 const TWITCH_TAB_RESUME_RETRY_DELAYS_MS = [0, 320, 900, 1700]
 const YOUTUBE_READY_TIMEOUT_MS = 7000
@@ -319,10 +319,8 @@ function TwitchEmbed({
 					return
 				}
 
-				if (player.isPaused?.()) {
-					player.setMuted(true)
-					player.play()
-				}
+				player.setMuted(true)
+				player.play()
 
 				schedulePendingPlaybackCheck(token)
 			}, TWITCH_PLAYBACK_RETRY_DELAY_MS)
@@ -401,22 +399,20 @@ function TwitchEmbed({
 						startPendingPlaybackRequest(playbackTokenRef.current)
 					}
 				}
-				handlePlaying = () => {
-					if (pendingPlaybackRef.current.token > 0) {
-						clearPendingPlaybackRequest()
-					}
-				}
+				handlePlaying = () => {}
 				handlePause = () => {
 					const pendingToken = pendingPlaybackRef.current.token
-					if (
-						pendingToken <= 0 ||
-						Date.now() >= pendingPlaybackRef.current.deadline
-					) {
+					if (pendingToken > 0 && Date.now() < pendingPlaybackRef.current.deadline) {
+						startPendingPlaybackRequest(pendingToken)
+						return
+					}
+
+					if (playbackTokenRef.current <= 0) {
 						clearPendingPlaybackRequest()
 						return
 					}
 
-					startPendingPlaybackRequest(pendingToken)
+					startPendingPlaybackRequest(playbackTokenRef.current)
 				}
 				handlePlaybackBlocked = () => {
 					const pendingToken = pendingPlaybackRef.current.token

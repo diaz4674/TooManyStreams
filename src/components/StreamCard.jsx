@@ -5,7 +5,18 @@ import { isStreamChatCapable } from "../utils"
 
 const TWITCH_CARD_AUTOPLAY_THRESHOLD = 0.6
 const APP_RESUME_DEDUP_WINDOW_MS = 400
-const CINEMA_PRIMARY_AUTOPLAY_RETRY_DELAYS_MS = [0, 320, 900, 1700, 2600, 3800]
+const CINEMA_PRIMARY_AUTOPLAY_RETRY_DELAYS_MS = [
+	0,
+	320,
+	900,
+	1700,
+	2600,
+	3800,
+	5200,
+	7000,
+	9000,
+	12000,
+]
 
 function PlatformLogo({ platform }) {
 	if (platform === "twitch") {
@@ -83,6 +94,7 @@ function StreamCardComponent({
 	onRemoveFromFocus,
 	onPlayerReady,
 	loadSessionKey,
+	preserveFullFrame = false,
 	canManageStreamMembership = true,
 	canReorderStreamMembership = true,
 }) {
@@ -103,8 +115,12 @@ function StreamCardComponent({
 		focusTilePlacement === "bottom" &&
 		typeof onRemoveFromFocus === "function"
 	const showFocusVolumeOnHover = isFocusPresentation && showVolume
+	const showEmbeddedFocusOverlay =
+		isFocusPresentation &&
+		!(stream.platform === "twitch" && focusTileRole === "primary")
 	const dragHandleLabel = "Drag to reorder stream"
 	const shouldCropToFill =
+		!preserveFullFrame &&
 		stream.platform === "youtube" &&
 		(isFocusPresentation ? focusTileRole === "companion" : fluidVideo)
 	const articleRef = useRef(null)
@@ -387,7 +403,7 @@ function StreamCardComponent({
 						loadSessionKey={loadSessionKey}
 					/>
 
-					{isFocusPresentation && (
+					{showEmbeddedFocusOverlay && (
 						<div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
 							<div className="flex items-start justify-between gap-3">
 								<div

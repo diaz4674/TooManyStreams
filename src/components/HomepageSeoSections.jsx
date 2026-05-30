@@ -24,6 +24,21 @@ const faqs = [
 		answer:
 			"Yes. You can select a main stream so the primary audio comes from the stream you are focused on while the rest stay visible.",
 	},
+	{
+		question: "How can I contact you?",
+		answer: (
+			<>
+				You can email me at{" "}
+				<a
+					href="mailto:brnt.marshmllow@gmail.com"
+					className="font-semibold text-cyan-200 transition-colors hover:text-cyan-100"
+				>
+					brnt.marshmllow@gmail.com
+				</a>
+				.
+			</>
+		),
+	},
 ]
 
 export default function HomepageSeoSections() {
