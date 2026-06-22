@@ -241,6 +241,8 @@ export default function TwitchDiscovery({
 				title: result.title,
 			})
 		}
+
+		setOpen(false)
 	}
 
 	const handlePreview = (result) => {
