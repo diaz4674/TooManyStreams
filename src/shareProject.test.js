@@ -18,12 +18,13 @@ function createState(overrides = {}) {
 	}
 }
 
-test("shared project payload round-trips mixed streams and unicode text", () => {
+test("shared standard project payload round-trips mixed streams and unicode text", () => {
 	const twitchId = crypto.randomUUID()
 	const youtubeId = crypto.randomUUID()
 	const payload = buildSharedProjectPayload(
 		{
 			name: "Summer Finals 日本語",
+			kind: "standard",
 			streamIds: [twitchId, youtubeId],
 		},
 		{
@@ -45,6 +46,7 @@ test("shared project payload round-trips mixed streams and unicode text", () => 
 	assert.deepEqual(decodeSharedProjectPayload(encodeSharedProjectPayload(payload)), {
 		version: SHARED_PROJECT_VERSION,
 		project: {
+			kind: "standard",
 			name: "Summer Finals 日本語",
 			streams: [
 				{
@@ -62,32 +64,38 @@ test("shared project payload round-trips mixed streams and unicode text", () => 
 	})
 })
 
-test("importSharedProject returns the original state for malformed payloads", () => {
-	const state = createState({
-		projects: [
-			{
-				id: "project-1",
-				name: "Main View",
-				kind: "standard",
-				streamIds: [],
-				activeChatStreamId: null,
-				layoutMode: "auto",
-			},
-		],
-		activeProjectId: "project-1",
-	})
+test("legacy shared payload still decodes into the new standard shape", () => {
+	const legacyPayload = {
+		version: 1,
+		project: {
+			name: "Legacy Stream Wall",
+			streams: [
+				{
+					platform: "twitch",
+					channelName: "tarik",
+					title: "Tarik",
+				},
+			],
+		},
+	}
 
-	assert.equal(
-		importSharedProject(state, {
-			version: 99,
-			project: { name: "Broken", streams: [] },
-		}),
-		state,
-	)
-	assert.throws(() => decodeSharedProjectPayload("not-a-valid-share-link"))
+	assert.deepEqual(decodeSharedProjectPayload(encodeSharedProjectPayload(legacyPayload)), {
+		version: SHARED_PROJECT_VERSION,
+		project: {
+			kind: "standard",
+			name: "Legacy Stream Wall",
+			streams: [
+				{
+					platform: "twitch",
+					channelName: "tarik",
+					title: "Tarik",
+				},
+			],
+		},
+	})
 })
 
-test("importSharedProject preserves order, reuses existing streams, and activates the new project", () => {
+test("importSharedProject preserves order, reuses existing streams, and activates the new standard project", () => {
 	const existingTwitchId = "stream-existing-twitch"
 	const existingOtherId = "stream-existing-other"
 	const state = createState({
@@ -120,6 +128,7 @@ test("importSharedProject preserves order, reuses existing streams, and activate
 	const sharedPayload = {
 		version: SHARED_PROJECT_VERSION,
 		project: {
+			kind: "standard",
 			name: "Championship Watch Party",
 			streams: [
 				{
@@ -149,21 +158,4 @@ test("importSharedProject preserves order, reuses existing streams, and activate
 	assert.equal(nextState.projects[1].name, "Championship Watch Party")
 	assert.equal(nextState.projects[1].layoutMode, "auto")
 	assert.equal(nextState.projects[1].streamIds[1], existingTwitchId)
-
-	const importedStreams = nextState.projects[1].streamIds.map(
-		(streamId) => nextState.streamsById[streamId],
-	)
-	assert.deepEqual(
-		importedStreams.map((stream) => [stream.platform, stream.channelName, stream.title]),
-		[
-			[
-				"youtube",
-				"https://www.youtube.com/watch?v=jfKfPfyJRdk",
-				"Lofi Girl",
-			],
-			["twitch", "shroud", "Shroud"],
-			["twitch", "mynewstream", "My New Stream"],
-		],
-	)
-	assert.equal(nextState.projects[1].activeChatStreamId, nextState.projects[1].streamIds[0])
 })

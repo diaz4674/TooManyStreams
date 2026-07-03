@@ -34,6 +34,19 @@ export function getEmbedSrc(stream, options) {
 	return ""
 }
 
+export function getTwitchChannelUrl(stream) {
+	if (stream?.platform !== "twitch" || typeof stream.channelName !== "string") {
+		return null
+	}
+
+	const channel = stream.channelName.trim()
+	if (!channel) {
+		return null
+	}
+
+	return `https://www.twitch.tv/${encodeURIComponent(channel)}`
+}
+
 export function getTwitchChatSrc(stream, options = {}) {
 	const params = new URLSearchParams({
 		parent: getTwitchParent(),

@@ -1,8 +1,10 @@
 import { isStreamChatCapable } from "./utils.js"
+import { normalizeStreamViews } from "./streamViews.js"
+import { STANDARD_PROJECT_KIND } from "./store.js"
 
 export const SHARED_PROJECT_QUERY_PARAM = "share"
-export const SHARED_PROJECT_VERSION = 1
-const STANDARD_PROJECT_KIND = "standard"
+export const SHARED_PROJECT_VERSION = 2
+const LEGACY_SHARED_PROJECT_VERSION = 1
 
 function isSupportedPlatform(platform) {
 	return platform === "twitch" || platform === "youtube"
@@ -63,22 +65,18 @@ function normalizeSharedStream(rawStream) {
 		throw new Error("Invalid shared project stream.")
 	}
 
-	return {
+	// Saved crop views are optional extras; invalid entries are dropped rather
+	// than failing the whole payload.
+	return normalizeStreamViews({
 		platform,
 		channelName,
 		title,
-	}
+		views: rawStream?.views,
+		activeViewId: rawStream?.activeViewId,
+	})
 }
 
-function normalizeSharedProjectPayload(rawPayload) {
-	if (
-		!rawPayload ||
-		typeof rawPayload !== "object" ||
-		rawPayload.version !== SHARED_PROJECT_VERSION
-	) {
-		throw new Error("Unsupported shared project payload.")
-	}
-
+function normalizeLegacyPayload(rawPayload) {
 	const name = String(rawPayload.project?.name ?? "").trim()
 	const rawStreams = rawPayload.project?.streams
 
@@ -89,6 +87,40 @@ function normalizeSharedProjectPayload(rawPayload) {
 	return {
 		version: SHARED_PROJECT_VERSION,
 		project: {
+			kind: STANDARD_PROJECT_KIND,
+			name,
+			streams: rawStreams.map(normalizeSharedStream),
+		},
+	}
+}
+
+function normalizeSharedProjectPayload(rawPayload) {
+	if (!rawPayload || typeof rawPayload !== "object") {
+		throw new Error("Unsupported shared project payload.")
+	}
+
+	if (rawPayload.version === LEGACY_SHARED_PROJECT_VERSION) {
+		return normalizeLegacyPayload(rawPayload)
+	}
+
+	if (rawPayload.version !== SHARED_PROJECT_VERSION) {
+		throw new Error("Unsupported shared project payload.")
+	}
+
+	const name = String(rawPayload.project?.name ?? "").trim()
+	if (!name) {
+		throw new Error("Invalid shared project payload.")
+	}
+
+	const rawStreams = rawPayload.project?.streams
+	if (!Array.isArray(rawStreams)) {
+		throw new Error("Invalid shared project payload.")
+	}
+
+	return {
+		version: SHARED_PROJECT_VERSION,
+		project: {
+			kind: STANDARD_PROJECT_KIND,
 			name,
 			streams: rawStreams.map(normalizeSharedStream),
 		},
@@ -101,15 +133,20 @@ export function buildSharedProjectPayload(project, streamsById) {
 	const streams = streamIds
 		.map((streamId) => streamsById?.[streamId])
 		.filter(isShareableStream)
-		.map((stream) => ({
-			platform: stream.platform,
-			channelName: stream.channelName.trim(),
-			title: stream.title.trim(),
-		}))
+		.map((stream) =>
+			normalizeStreamViews({
+				platform: stream.platform,
+				channelName: stream.channelName.trim(),
+				title: stream.title.trim(),
+				views: stream.views,
+				activeViewId: stream.activeViewId,
+			}),
+		)
 
 	return {
 		version: SHARED_PROJECT_VERSION,
 		project: {
+			kind: STANDARD_PROJECT_KIND,
 			name,
 			streams,
 		},
@@ -145,14 +182,7 @@ export function decodeSharedProjectPayload(value) {
 	return normalizeSharedProjectPayload(JSON.parse(json))
 }
 
-export function importSharedProject(state, payload) {
-	let normalizedPayload
-	try {
-		normalizedPayload = normalizeSharedProjectPayload(payload)
-	} catch {
-		return state
-	}
-
+function importStandardProject(state, payload) {
 	let streamsById = state.streamsById
 	let didAddStream = false
 	const importedStreamIds = []
@@ -164,7 +194,7 @@ export function importSharedProject(state, payload) {
 		),
 	)
 
-	for (const stream of normalizedPayload.project.streams) {
+	for (const stream of payload.project.streams) {
 		const key = getStreamKey(stream.platform, stream.channelName)
 		let streamId = existingStreamIdsByKey.get(key)
 
@@ -172,12 +202,14 @@ export function importSharedProject(state, payload) {
 			streamId = crypto.randomUUID()
 			streamsById = {
 				...streamsById,
-				[streamId]: {
+				[streamId]: normalizeStreamViews({
 					id: streamId,
 					platform: stream.platform,
 					channelName: stream.channelName,
 					title: stream.title,
-				},
+					views: stream.views,
+					activeViewId: stream.activeViewId,
+				}),
 			}
 			existingStreamIdsByKey.set(key, streamId)
 			didAddStream = true
@@ -189,11 +221,12 @@ export function importSharedProject(state, payload) {
 	}
 
 	const activeChatStreamId =
-		importedStreamIds.find((streamId) => isStreamChatCapable(streamsById[streamId])) ??
-		null
+		importedStreamIds.find((streamId) =>
+			isStreamChatCapable(streamsById[streamId]),
+		) ?? null
 	const project = {
 		id: crypto.randomUUID(),
-		name: normalizedPayload.project.name,
+		name: payload.project.name,
 		kind: STANDARD_PROJECT_KIND,
 		streamIds: importedStreamIds,
 		activeChatStreamId,
@@ -206,3 +239,15 @@ export function importSharedProject(state, payload) {
 		activeProjectId: project.id,
 	}
 }
+
+export function importSharedProject(state, payload) {
+	let normalizedPayload
+	try {
+		normalizedPayload = normalizeSharedProjectPayload(payload)
+	} catch {
+		return state
+	}
+
+	return importStandardProject(state, normalizedPayload)
+}
+

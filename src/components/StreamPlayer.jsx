@@ -1,5 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react"
 import { getEmbedSrc, getTwitchParent } from "../utils"
+import { areCropsEqual, getCropFrameLayout, isFullCrop } from "../streamViews"
 
 let twitchSdkPromise
 let youtubeSdkPromise
@@ -187,20 +196,107 @@ function useEmbedViewport(cropToFill) {
 	return { containerRef, frameStyle }
 }
 
+// Renders children (the embed) on an oversized virtual 16:9 frame clipped so
+// only the crop rect is visible — an OBS-style crop that never reloads the
+// player when the rect changes.
+function CropViewport({ crop, children }) {
+	const containerRef = useRef(null)
+	const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+
+	useEffect(() => {
+		const node = containerRef.current
+		if (!node) {
+			return undefined
+		}
+
+		const updateSize = () => {
+			const rect = node.getBoundingClientRect()
+			setContainerSize({
+				width: rect.width,
+				height: rect.height,
+			})
+		}
+
+		updateSize()
+
+		const resizeObserver =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(() => updateSize())
+		resizeObserver?.observe(node)
+
+		return () => {
+			resizeObserver?.disconnect()
+		}
+	}, [])
+
+	const layout = useMemo(
+		() =>
+			getCropFrameLayout({
+				containerWidth: containerSize.width,
+				containerHeight: containerSize.height,
+				crop,
+			}),
+		[containerSize.height, containerSize.width, crop],
+	)
+
+	return (
+		<div ref={containerRef} className="absolute inset-0 bg-slate-950">
+			{layout && (
+				<div
+					className="absolute overflow-hidden"
+					style={{
+						left: `${layout.content.left}px`,
+						top: `${layout.content.top}px`,
+						width: `${layout.content.width}px`,
+						height: `${layout.content.height}px`,
+					}}
+				>
+					<div
+						className="absolute"
+						style={{
+							left: `${layout.frame.left}px`,
+							top: `${layout.frame.top}px`,
+							width: `${layout.frame.width}px`,
+							height: `${layout.frame.height}px`,
+						}}
+					>
+						{children}
+					</div>
+				</div>
+			)}
+		</div>
+	)
+}
+
 function TwitchEmbed({
 	stream,
-	muted = true,
+	volume = 100,
+	muted = false,
 	shouldAutoplay = true,
+	showControls = false,
 	playbackToken = 0,
 	onReady,
 	loadSessionKey,
 }) {
-	const playerBuildKey = 0
-	const playerId = `twitch-player-${stream.id}-${playerBuildKey}`
+	// Twitch's `controls` flag is construction-only (there is no setControls),
+	// so toggling it means rebuilding the player. Encoding it in the DOM id
+	// forces that rebuild when the tile enters/leaves cinema mode.
+	const controlsKey = showControls ? "controls" : "chromeless"
+	// Unique per mounted instance: the same stream can play in the grid and the
+	// crop editor at once, and duplicate DOM ids would make the SDK grab (and
+	// later destroy) the wrong container.
+	const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "")
+	const playerId = `twitch-player-${stream.id}-${instanceId}-${controlsKey}`
 	const containerRef = useRef(null)
 	const playerRef = useRef(null)
 	const readyRef = useRef(false)
 	const mutedRef = useRef(muted)
+	const volumeRef = useRef(volume)
+	// Twitch renders chromeless (controls: false), so the app volume slider is
+	// the only audio affordance. Autoplay stays muted until the user touches it.
+	const userVolumeIntentRef = useRef(false)
+	const lastVolumeRef = useRef(volume)
 	const playbackTokenRef = useRef(playbackToken)
 	const pendingPlaybackRef = useRef({
 		token: 0,
@@ -215,16 +311,43 @@ function TwitchEmbed({
 	const containerSizeRef = useRef(containerSize)
 	const readySignalSentRef = useRef(false)
 	mutedRef.current = muted
+	volumeRef.current = volume
 	playbackTokenRef.current = playbackToken
 	containerSizeRef.current = containerSize
+	// The fallback iframe has no SDK bridge, so it always starts muted to keep
+	// autoplay working.
 	const iframeSrc = getEmbedSrc(stream, {
-		muted,
+		muted: true,
 		autoplay: shouldAutoplay,
 	})
 
 	useEffect(() => {
 		readySignalSentRef.current = false
+		userVolumeIntentRef.current = false
+		lastVolumeRef.current = volumeRef.current
 	}, [loadSessionKey, stream.channelName, stream.id])
+
+	useEffect(() => {
+		if (volume !== lastVolumeRef.current) {
+			userVolumeIntentRef.current = true
+			lastVolumeRef.current = volume
+		}
+	}, [volume])
+
+	const applyAudioSettings = useCallback(() => {
+		const player = playerRef.current
+		if (!player || !readyRef.current) {
+			return
+		}
+
+		const nextVolume = volumeRef.current
+		player.setVolume?.(Math.min(Math.max(nextVolume / 100, 0), 1))
+		player.setMuted(
+			Boolean(mutedRef.current) ||
+				nextVolume === 0 ||
+				!userVolumeIntentRef.current,
+		)
+	}, [])
 
 	const notifyReady = useCallback(() => {
 		if (readySignalSentRef.current) {
@@ -319,6 +442,13 @@ function TwitchEmbed({
 					return
 				}
 
+				// Already playing: stop nudging. Every play() call re-shows the
+				// Twitch title overlay and resets its fade-out timer.
+				if (typeof player.isPaused === "function" && !player.isPaused()) {
+					clearPendingPlaybackRequest()
+					return
+				}
+
 				player.setMuted(true)
 				player.play()
 
@@ -335,14 +465,27 @@ function TwitchEmbed({
 				return
 			}
 
+			const player = playerRef.current
+			if (
+				readyRef.current &&
+				player &&
+				typeof player.isPaused === "function" &&
+				!player.isPaused()
+			) {
+				// Playback is already running; re-requesting it only flashes the
+				// Twitch title overlay.
+				clearPendingPlaybackRequest()
+				return
+			}
+
 			pendingPlaybackRef.current = {
 				token,
 				deadline: Date.now() + TWITCH_PLAYBACK_RECOVERY_WINDOW_MS,
 			}
 
-			if (readyRef.current && playerRef.current) {
-				playerRef.current.setMuted(true)
-				playerRef.current.play()
+			if (readyRef.current && player) {
+				player.setMuted(true)
+				player.play()
 			}
 
 			schedulePendingPlaybackCheck(token)
@@ -373,11 +516,17 @@ function TwitchEmbed({
 				player = new Twitch.Player(playerId, {
 					autoplay: shouldAutoplay,
 					channel: stream.channelName,
+					// Chromeless in the grid so the channel info overlay never
+					// pins on load; native controls only in cinema mode, where the
+					// user wants pause/quality/clip/fullscreen.
+					controls: showControls,
 					height: Math.max(
 						TWITCH_MIN_AUTOPLAY_HEIGHT_PX,
 						Math.round(containerSize.height || 0),
 					),
-					muted: mutedRef.current,
+					// Always construct muted so autoplay is never blocked; the real
+					// audio state is applied on READY.
+					muted: true,
 					parent: [getTwitchParent()],
 					width: Math.max(
 						TWITCH_MIN_AUTOPLAY_WIDTH_PX,
@@ -391,7 +540,7 @@ function TwitchEmbed({
 					}
 
 					readyRef.current = true
-					player.setMuted(Boolean(mutedRef.current))
+					applyAudioSettings()
 					syncPlayerFrame()
 					notifyReady()
 
@@ -399,7 +548,16 @@ function TwitchEmbed({
 						startPendingPlaybackRequest(playbackTokenRef.current)
 					}
 				}
-				handlePlaying = () => {}
+				handlePlaying = () => {
+					clearPendingPlaybackRequest()
+					// Playback nudges force-mute; restore the user's chosen audio
+					// once the stream is actually playing. Skip when native
+					// controls are shown so we don't override the user's own
+					// volume/mute clicks on the Twitch UI.
+					if (!showControls) {
+						applyAudioSettings()
+					}
+				}
 				handlePause = () => {
 					const pendingToken = pendingPlaybackRef.current.token
 					if (pendingToken > 0 && Date.now() < pendingPlaybackRef.current.deadline) {
@@ -456,23 +614,21 @@ function TwitchEmbed({
 			playerRef.current = null
 		}
 	}, [
+		applyAudioSettings,
 		clearPendingPlaybackRequest,
 		clearResumeRetryRequests,
 		notifyReady,
 		playerId,
 		shouldAutoplay,
+		showControls,
 		startPendingPlaybackRequest,
 		stream.channelName,
 		syncPlayerFrame,
 	])
 
 	useEffect(() => {
-		if (!readyRef.current) {
-			return
-		}
-
-		playerRef.current?.setMuted(Boolean(muted))
-	}, [muted])
+		applyAudioSettings()
+	}, [applyAudioSettings, muted, volume])
 
 	useEffect(() => {
 		const player = playerRef.current
@@ -586,7 +742,8 @@ function YouTubeEmbed({
 }) {
 	const [playerBuildKey, setPlayerBuildKey] = useState(0)
 	const [sdkFailed, setSdkFailed] = useState(false)
-	const iframeId = `youtube-player-${stream.id}-${playerBuildKey}`
+	const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "")
+	const iframeId = `youtube-player-${stream.id}-${instanceId}-${playerBuildKey}`
 	const mountRef = useRef(null)
 	const playerRef = useRef(null)
 	const readyRef = useRef(false)
@@ -728,6 +885,15 @@ function YouTubeEmbed({
 							!readyRef.current ||
 							!playerRef.current ||
 							document.visibilityState !== "visible"
+						) {
+							return
+						}
+
+						// Skip redundant play requests once playback is running so the
+						// YouTube overlay can fade out instead of flashing.
+						if (
+							playerRef.current.getPlayerState?.() ===
+							window.YT?.PlayerState?.PLAYING
 						) {
 							return
 						}
@@ -971,19 +1137,26 @@ function StreamPlayerComponent({
 	stream,
 	volume = 100,
 	cropToFill = false,
+	crop = null,
 	muted,
 	shouldAutoplay,
+	showTwitchControls = false,
 	playbackToken = 0,
 	onReady,
 	loadSessionKey,
 }) {
+	const activeCrop = crop && !isFullCrop(crop) ? crop : null
+	let embed = null
+
 	if (stream.platform === "twitch") {
-		return (
+		embed = (
 			<TwitchEmbed
 				stream={stream}
-				cropToFill={cropToFill}
-				muted={muted ?? true}
+				volume={volume}
+				cropToFill={activeCrop ? false : cropToFill}
+				muted={muted ?? false}
 				shouldAutoplay={shouldAutoplay ?? true}
+				showControls={showTwitchControls}
 				playbackToken={playbackToken}
 				onReady={onReady}
 				loadSessionKey={loadSessionKey}
@@ -992,11 +1165,11 @@ function StreamPlayerComponent({
 	}
 
 	if (stream.platform === "youtube") {
-		return (
+		embed = (
 			<YouTubeEmbed
 				stream={stream}
 				volume={volume}
-				cropToFill={cropToFill}
+				cropToFill={activeCrop ? false : cropToFill}
 				muted={muted ?? false}
 				shouldAutoplay={shouldAutoplay ?? true}
 				playbackToken={playbackToken}
@@ -1006,16 +1179,22 @@ function StreamPlayerComponent({
 		)
 	}
 
-	return null
+	if (!embed) {
+		return null
+	}
+
+	return activeCrop ? <CropViewport crop={activeCrop}>{embed}</CropViewport> : embed
 }
 
 const StreamPlayer = memo(
 	StreamPlayerComponent,
 	(previousProps, nextProps) =>
 		previousProps.cropToFill === nextProps.cropToFill &&
+		areCropsEqual(previousProps.crop ?? null, nextProps.crop ?? null) &&
 		previousProps.volume === nextProps.volume &&
 		previousProps.muted === nextProps.muted &&
 		previousProps.shouldAutoplay === nextProps.shouldAutoplay &&
+		previousProps.showTwitchControls === nextProps.showTwitchControls &&
 		previousProps.playbackToken === nextProps.playbackToken &&
 		previousProps.onReady === nextProps.onReady &&
 		previousProps.loadSessionKey === nextProps.loadSessionKey &&

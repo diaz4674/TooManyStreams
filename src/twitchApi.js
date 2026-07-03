@@ -11,6 +11,9 @@ const TWITCH_OAUTH_STATE_KEY = "multiwatch.twitch.oauthState"
 const TWITCH_AUTHORIZE_URL = "https://id.twitch.tv/oauth2/authorize"
 const TWITCH_VALIDATE_URL = "https://id.twitch.tv/oauth2/validate"
 const TWITCH_API_URL = "https://api.twitch.tv/helix"
+// Needed by POST /helix/clips; sessions created before this scope was
+// requested won't have it, so clip UI must check canCreateTwitchClips first.
+export const TWITCH_CLIPS_EDIT_SCOPE = "clips:edit"
 
 export class TwitchAuthorizationError extends Error {
 	constructor(message = "Your Twitch connection has expired.") {
@@ -163,7 +166,7 @@ export function beginTwitchAuthorization() {
 		client_id: clientId,
 		redirect_uri: getTwitchRedirectUri(),
 		response_type: "token",
-		scope: "",
+		scope: TWITCH_CLIPS_EDIT_SCOPE,
 		state,
 	})
 
@@ -280,7 +283,7 @@ function normalizeTwitchChannel(channel) {
 	}
 }
 
-async function fetchTwitchApi(path, sessionOrToken, signal) {
+async function fetchTwitchApi(path, sessionOrToken, signal, options = {}) {
 	const clientId = getTwitchClientId()
 	if (!clientId) {
 		throw new Error("Twitch discovery is not configured.")
@@ -297,6 +300,7 @@ async function fetchTwitchApi(path, sessionOrToken, signal) {
 	}
 
 	const response = await fetch(`${TWITCH_API_URL}${path}`, {
+		method: options.method ?? "GET",
 		headers: {
 			Authorization: `Bearer ${accessToken}`,
 			"Client-Id": clientId,
@@ -308,11 +312,61 @@ async function fetchTwitchApi(path, sessionOrToken, signal) {
 		throw new TwitchAuthorizationError()
 	}
 
+	if (response.status === 404 && options.notFoundMessage) {
+		throw new Error(options.notFoundMessage)
+	}
+
 	if (!response.ok) {
 		throw new Error("Twitch is unavailable right now.")
 	}
 
 	return response.json()
+}
+
+export function canCreateTwitchClips(session) {
+	return (
+		Boolean(session?.accessToken) &&
+		Array.isArray(session?.scopes) &&
+		session.scopes.includes(TWITCH_CLIPS_EDIT_SCOPE)
+	)
+}
+
+// Creates a clip of the trailing ~90s of a live broadcast and resolves with
+// Twitch's { id, edit_url } so callers can open the trim/publish editor.
+export async function createTwitchClip(channelName, sessionOrToken, signal) {
+	const login = String(channelName ?? "")
+		.trim()
+		.toLowerCase()
+	if (!login) {
+		throw new Error("This stream has no Twitch channel to clip.")
+	}
+
+	const users = await fetchTwitchApi(
+		`/users?${new URLSearchParams({ login }).toString()}`,
+		sessionOrToken,
+		signal,
+	)
+	const broadcaster = users.data[0]
+	if (!broadcaster) {
+		throw new Error("Twitch channel not found.")
+	}
+
+	const result = await fetchTwitchApi(
+		`/clips?${new URLSearchParams({ broadcaster_id: broadcaster.id }).toString()}`,
+		sessionOrToken,
+		signal,
+		{
+			method: "POST",
+			// Helix returns 404 for offline channels, not an explicit error code.
+			notFoundMessage: "Clips can only be created while the channel is live.",
+		},
+	)
+	const clip = result.data?.[0]
+	if (!clip?.edit_url) {
+		throw new Error("Twitch did not return a clip. Please try again.")
+	}
+
+	return clip
 }
 
 export async function searchTwitchChannels(query, sessionOrToken, signal) {

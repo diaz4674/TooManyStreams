@@ -18,6 +18,7 @@ import StreamPlayer from "./StreamPlayer"
 import StreamChatSidebar from "./StreamChatSidebar"
 import { buildDuoFocusLayout, getFocusCanvas } from "../focusLayouts"
 import { getWallLayout, isStreamChatCapable } from "../utils"
+import { getActiveStreamCrop } from "../streamViews"
 import { AUTO_WALL_GAP_PX, STREAM_CARD_CHROME_PX } from "../layoutUtils"
 import { useWallStore } from "../wallStore"
 
@@ -29,9 +30,10 @@ const INLINE_CHAT_ADDED_HEIGHT_PX =
 	INLINE_CHAT_PANEL_HEIGHT_PX + INLINE_CHAT_MARGIN_BOTTOM_PX
 const FOCUS_WIDE_MIN_WIDTH_PX = 1280
 const FOCUS_WIDE_MIN_HEIGHT_PX = 720
-const FOCUS_MAX_STREAMS = 5
+const FOCUS_MAX_STREAMS = 8
 const FOCUS_OVERLAY_GAP_PX = 16
 const FOCUS_STACKED_MIN_COMPANION_HEIGHT_PX = 148
+const FOCUS_STACKED_MAX_RAIL_SLOTS = 4
 const FOCUS_TRANSITION_DURATION_MS = 320
 const FOCUS_OPACITY_TRANSITION_DURATION_MS = 220
 const FOCUS_CHAT_DRAWER_GAP_PX = 24
@@ -124,7 +126,26 @@ function getStackedRightRailCapacity({ viewportWidth, viewportHeight }) {
 		),
 	)
 
-	return clamp(maxRailSlotsByHeight, 1, FOCUS_MAX_STREAMS - 1)
+	return clamp(maxRailSlotsByHeight, 1, FOCUS_STACKED_MAX_RAIL_SLOTS)
+}
+
+function getStackedBottomCapacity({ viewportWidth, viewportHeight }) {
+	const canvas = getFocusCanvas(viewportWidth, viewportHeight)
+	const railWidth = clamp(canvas.width * 0.26, 220, 320)
+	const primaryWidth = Math.max(
+		320,
+		canvas.width - railWidth - FOCUS_OVERLAY_GAP_PX,
+	)
+	const minBottomWidth = FOCUS_STACKED_MIN_COMPANION_HEIGHT_PX * (16 / 9)
+
+	return clamp(
+		Math.floor(
+			(primaryWidth + FOCUS_OVERLAY_GAP_PX) /
+				(minBottomWidth + FOCUS_OVERLAY_GAP_PX),
+		),
+		1,
+		FOCUS_MAX_STREAMS - 1,
+	)
 }
 
 function buildHeroFocusSlotStyles({
@@ -258,7 +279,8 @@ function buildStackedFocusSlotStyles({
 	const companionWidth = width - primaryWidth - FOCUS_OVERLAY_GAP_PX
 	const railSlotHeight =
 		rightRailCount > 1
-			? (topHeight - FOCUS_OVERLAY_GAP_PX) / rightRailCount
+			? (topHeight - FOCUS_OVERLAY_GAP_PX * (rightRailCount - 1)) /
+				rightRailCount
 			: topHeight
 	const idealCompanionHeight = companionWidth * (9 / 16)
 	const companionHeight = Math.min(railSlotHeight, idealCompanionHeight)
@@ -390,6 +412,7 @@ function getStackedFocusSlotCount({
 	availableCount,
 	overflowEnabled = false,
 	rightRailMaxSlots,
+	bottomMaxSlots = FOCUS_MAX_STREAMS - 1,
 }) {
 	if (focusedCount <= 0) {
 		return 0
@@ -409,6 +432,7 @@ function getStackedFocusSlotCount({
 	const bottomOpenSlotCount =
 		companionCount >= rightRailMaxSlots &&
 		focusedCount < FOCUS_MAX_STREAMS &&
+		bottomCompanionCount < bottomMaxSlots &&
 		(bottomCompanionCount > 0 || overflowEnabled) &&
 		remainingAvailableCount > 0
 			? 1
@@ -489,7 +513,7 @@ function FocusChatResizeHandle({
 	)
 }
 
-function FocusAddSlot({ style, availableStreams, onAddCompanion }) {
+function FocusAddSlot({ style, availableStreams, onAddCompanion, onDismiss }) {
 	const [menuOpen, setMenuOpen] = useState(false)
 	const slotRef = useRef(null)
 	const menuRef = useRef(null)
@@ -576,8 +600,21 @@ function FocusAddSlot({ style, availableStreams, onAddCompanion }) {
 					ref={slotRef}
 					className="flex h-full min-h-0 flex-col justify-center rounded-[1.7rem] border border-dashed border-cyan-300/28 bg-slate-950/26 p-4 backdrop-blur-sm"
 				>
-					<div className="text-[0.7rem] font-bold uppercase tracking-[0.16em] text-cyan-100/70">
-						Open Slot
+					<div className="flex items-center justify-between gap-2">
+						<div className="text-[0.7rem] font-bold uppercase tracking-[0.16em] text-cyan-100/70">
+							Open Slot
+						</div>
+						{onDismiss && (
+							<button
+								type="button"
+								onClick={onDismiss}
+								aria-label="Dismiss open slot"
+								title="Dismiss open slot"
+								className="inline-flex h-7 w-7 items-center justify-center rounded-full border-0 bg-white/8 text-slate-200/80 transition-colors cursor-pointer hover:bg-white/14 hover:text-white"
+							>
+								<i className="fa-solid fa-xmark text-[0.72rem]" />
+							</button>
+						)}
 					</div>
 					<button
 						ref={buttonRef}
@@ -668,6 +705,8 @@ function FocusOverlayChrome({
 	badgeLabel = "Cinema Mode",
 	secondaryAction = null,
 	primaryAction = null,
+	onDismissOverflowSlot,
+	overflowSlotDismissible = false,
 }) {
 	const drawerRect = useMemo(
 		() => getFocusChatDrawerRect(viewportWidth, viewportHeight),
@@ -974,6 +1013,9 @@ function FocusOverlayChrome({
 						style={style}
 						availableStreams={availableCompanionStreams}
 						onAddCompanion={onAddFocusCompanion}
+						onDismiss={
+							overflowSlotDismissible ? onDismissOverflowSlot : undefined
+						}
 					/>
 				))}
 
@@ -1326,6 +1368,8 @@ function SortableStreamCard({
 	onEdit,
 	onToggleChat,
 	onFocus,
+	onOpenViews,
+	onSelectView,
 	focusFrame = null,
 	hasActiveFocus = false,
 	onClearFocus,
@@ -1477,6 +1521,8 @@ function SortableStreamCard({
 				onEdit={onEdit}
 				onToggleChat={onToggleChat}
 				onFocus={onFocus}
+				onOpenViews={onOpenViews}
+				onSelectView={onSelectView}
 				onPlayerReady={onPlayerReady}
 				loadSessionKey={loadSessionKey}
 				isFocused={isInFocusComposition}
@@ -1504,6 +1550,7 @@ function AutoStreamGrid({
 	primaryFocusedStreamId = null,
 	effectivePrimaryFocusedStreamId = null,
 	focusPlaybackToken = 0,
+	companionPlaybackToken = 0,
 	primaryFocusTransitionKey = 0,
 	onVolumeChange,
 	onRemove,
@@ -1511,6 +1558,8 @@ function AutoStreamGrid({
 	onReorder,
 	onToggleChat,
 	onFocus,
+	onOpenViews,
+	onSelectView,
 	focusFramesByStreamId = {},
 	visibleFocusFramesByStreamId = {},
 	hasActiveFocus = false,
@@ -1577,6 +1626,11 @@ function AutoStreamGrid({
 				const chatExpanded = expandedCardChatStreamId === stream.id
 				const cardHeight =
 					layout.cardHeight + (chatExpanded ? INLINE_CHAT_ADDED_HEIGHT_PX : 0)
+				const streamFocusFrame = visibleFocusFramesByStreamId[stream.id] ?? null
+				const isFocusCompanion =
+					hasActiveFocus &&
+					!hasPreviewOverlay &&
+					streamFocusFrame?.role === "companion"
 				const sharedProps = {
 					stream,
 					cardHeight,
@@ -1587,9 +1641,14 @@ function AutoStreamGrid({
 					),
 					videoHeight: layout.videoHeight,
 					volume: streamVolumes[stream.id] ?? 100,
+					// Silence the background wall behind an overlay (and every
+					// non-preview tile during a discovery preview). Cinema
+					// companions are exempt: they expose their own volume slider,
+					// so hard-muting them would make that control do nothing.
 					forcedMuted:
 						hasOverlayPresentation &&
-						stream.id !== effectivePrimaryFocusedStreamId
+						stream.id !== effectivePrimaryFocusedStreamId &&
+						!isFocusCompanion
 							? true
 							: undefined,
 					playbackToken:
@@ -1597,7 +1656,9 @@ function AutoStreamGrid({
 						!hasPreviewOverlay &&
 						stream.id === primaryFocusedStreamId
 							? focusPlaybackToken
-							: 0,
+							: isFocusCompanion
+								? companionPlaybackToken
+								: 0,
 					primaryFocusTransitionKey:
 						hasActiveFocus &&
 						!hasPreviewOverlay &&
@@ -1609,7 +1670,9 @@ function AutoStreamGrid({
 					onEdit,
 					onToggleChat,
 					onFocus,
-					focusFrame: visibleFocusFramesByStreamId[stream.id] ?? null,
+					onOpenViews,
+					onSelectView,
+					focusFrame: streamFocusFrame,
 					hasActiveFocus: hasOverlayPresentation,
 					onClearFocus,
 					onPromoteFocusStream,
@@ -1684,6 +1747,8 @@ function MatrixStreamGrid({
 					<StreamPlayer
 						stream={stream}
 						volume={streamVolumes[stream.id] ?? 100}
+						crop={getActiveStreamCrop(stream)}
+						showTwitchControls
 						onReady={onPlayerReady}
 						loadSessionKey={loadSessionKey}
 					/>
@@ -1705,6 +1770,8 @@ export default function StreamGrid({
 	onRemove,
 	onEdit,
 	onReorder,
+	onOpenViews,
+	onSelectView,
 	expandedCardChatStreamId = null,
 	focusState,
 	onToggleChat,
@@ -1732,6 +1799,7 @@ export default function StreamGrid({
 	const focusChatOpen = focusState?.focusChatOpen ?? false
 	const focusChatStreamId = focusState?.focusChatStreamId ?? null
 	const [focusPlaybackToken, setFocusPlaybackToken] = useState(0)
+	const [companionPlaybackToken, setCompanionPlaybackToken] = useState(0)
 	const [primaryFocusTransitionKey, setPrimaryFocusTransitionKey] = useState(0)
 	const [showWallLoader, setShowWallLoader] = useState(streams.length > 0)
 	const [pendingStreamIds, setPendingStreamIds] = useState(
@@ -1795,6 +1863,19 @@ export default function StreamGrid({
 		setFocusPlaybackToken((token) => token + 1)
 		setPrimaryFocusTransitionKey((key) => key + 1)
 	}, [primaryFocusedStreamId])
+
+	// Nudge companion tiles to (muted) autoplay whenever the focused set changes.
+	// A newly added companion reuses its grid player instance, which may be
+	// paused, so without this nudge it stays frozen on its last frame.
+	const focusedStreamIdsSignature = focusedStreamIds.join("|")
+	useEffect(() => {
+		if (focusedStreamIds.length <= 1) {
+			return
+		}
+
+		setCompanionPlaybackToken((token) => token + 1)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [focusedStreamIdsSignature])
 
 	const handlePrimaryFocusTransitionSettled = useCallback(
 		(streamId, settledTransitionKey) => {
@@ -1959,6 +2040,14 @@ export default function StreamGrid({
 			}),
 		[containerSize.viewportHeight, containerSize.viewportWidth],
 	)
+	const stackedBottomMaxSlots = useMemo(
+		() =>
+			getStackedBottomCapacity({
+				viewportWidth: containerSize.viewportWidth,
+				viewportHeight: containerSize.viewportHeight,
+			}),
+		[containerSize.viewportHeight, containerSize.viewportWidth],
+	)
 	const stackedFocusedCompanionCount = Math.max(
 		0,
 		visibleFocusedStreamIds.length - 1,
@@ -1967,6 +2056,18 @@ export default function StreamGrid({
 		0,
 		stackedFocusedCompanionCount - stackedRightRailMaxSlots,
 	)
+	// Once the bottom row empties (last bottom companion removed), collapse the
+	// revealed open slot so the placeholder disappears instead of lingering.
+	const previousBottomCompanionCountRef = useRef(stackedBottomCompanionCount)
+	useEffect(() => {
+		if (
+			previousBottomCompanionCountRef.current > 0 &&
+			stackedBottomCompanionCount === 0
+		) {
+			setStackedOverflowEnabled(false)
+		}
+		previousBottomCompanionCountRef.current = stackedBottomCompanionCount
+	}, [stackedBottomCompanionCount])
 	const canRevealStackedOverflow =
 		hasMultiFocusExperience &&
 		isStackedFocusLayout &&
@@ -1975,6 +2076,10 @@ export default function StreamGrid({
 		availableCompanionStreams.length > 0 &&
 		visibleFocusedStreamIds.length < FOCUS_MAX_STREAMS &&
 		!stackedOverflowEnabled
+	const canDismissStackedOverflow =
+		isStackedFocusLayout &&
+		stackedOverflowEnabled &&
+		stackedBottomCompanionCount === 0
 	const stackedFocusSlotCount = useMemo(
 		() =>
 			getStackedFocusSlotCount({
@@ -1982,9 +2087,11 @@ export default function StreamGrid({
 				availableCount: availableCompanionStreams.length,
 				overflowEnabled: stackedOverflowEnabled,
 				rightRailMaxSlots: stackedRightRailMaxSlots,
+				bottomMaxSlots: stackedBottomMaxSlots,
 			}),
 		[
 			availableCompanionStreams.length,
+			stackedBottomMaxSlots,
 			stackedRightRailMaxSlots,
 			stackedOverflowEnabled,
 			visibleFocusedStreamIds.length,
@@ -2178,6 +2285,8 @@ export default function StreamGrid({
 									}
 								: null
 						}
+						overflowSlotDismissible={canDismissStackedOverflow}
+						onDismissOverflowSlot={() => setStackedOverflowEnabled(false)}
 					/>
 					{hasSingleFocusRail && (
 						<SingleFocusChatRail
@@ -2215,6 +2324,7 @@ export default function StreamGrid({
 					primaryFocusedStreamId={primaryFocusedStreamId}
 					effectivePrimaryFocusedStreamId={effectivePrimaryFocusedStreamId}
 					focusPlaybackToken={focusPlaybackToken}
+					companionPlaybackToken={companionPlaybackToken}
 					primaryFocusTransitionKey={primaryFocusTransitionKey}
 					onVolumeChange={onVolumeChange}
 					onRemove={onRemove}
@@ -2222,6 +2332,8 @@ export default function StreamGrid({
 					onReorder={onReorder}
 					onToggleChat={onToggleChat}
 					onFocus={onEnterFocus}
+					onOpenViews={onOpenViews}
+					onSelectView={onSelectView}
 					focusFramesByStreamId={visibleFocusFramesByStreamId}
 					hasActiveFocus={hasOverlayPresentation}
 					visibleFocusFramesByStreamId={visibleFocusFramesByStreamId}

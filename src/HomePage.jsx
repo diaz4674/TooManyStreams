@@ -8,13 +8,16 @@ import ProjectsDialog from "./components/ProjectsDialog"
 import StreamChatSidebar from "./components/StreamChatSidebar"
 import HomepageSeoSections from "./components/HomepageSeoSections"
 import PageMeta from "./components/PageMeta"
+import StreamViewsDialog from "./components/StreamViewsDialog"
 import { isStreamChatCapable } from "./utils"
+import { getStreamViews, normalizeCropRect } from "./streamViews"
 import {
 	loadPersistedState,
 	MAX_COLUMN_OPTIONS,
 	normalizeMaxColumns,
 	persistState,
 	sampleStreams,
+	STANDARD_PROJECT_KIND,
 } from "./store"
 import {
 	buildSharedProjectPayload,
@@ -155,7 +158,7 @@ function viewerReducer(state, action) {
 			const project = {
 				id: crypto.randomUUID(),
 				name,
-				kind: "standard",
+				kind: STANDARD_PROJECT_KIND,
 				streamIds: [],
 				activeChatStreamId: null,
 				layoutMode: "auto",
@@ -303,6 +306,89 @@ function viewerReducer(state, action) {
 				),
 			}
 		}
+		case "saveStreamView": {
+			const stream = state.streamsById[action.streamId]
+			const crop = normalizeCropRect(action.view?.crop)
+			const name = String(action.view?.name ?? "").trim()
+			if (!stream || !crop || !name) {
+				return state
+			}
+
+			const views = getStreamViews(stream)
+			const viewId =
+				typeof action.view.id === "string" && action.view.id
+					? action.view.id
+					: crypto.randomUUID()
+			const nextView = { id: viewId, name, crop }
+			const nextViews = views.some((view) => view.id === viewId)
+				? views.map((view) => (view.id === viewId ? nextView : view))
+				: [...views, nextView]
+
+			return {
+				...state,
+				streamsById: {
+					...state.streamsById,
+					[action.streamId]: {
+						...stream,
+						views: nextViews,
+						activeViewId: viewId,
+					},
+				},
+			}
+		}
+		case "deleteStreamView": {
+			const stream = state.streamsById[action.streamId]
+			if (!stream) {
+				return state
+			}
+
+			const views = getStreamViews(stream)
+			const nextViews = views.filter((view) => view.id !== action.viewId)
+			if (nextViews.length === views.length) {
+				return state
+			}
+
+			return {
+				...state,
+				streamsById: {
+					...state.streamsById,
+					[action.streamId]: {
+						...stream,
+						views: nextViews,
+						activeViewId:
+							stream.activeViewId === action.viewId
+								? null
+								: (stream.activeViewId ?? null),
+					},
+				},
+			}
+		}
+		case "setStreamActiveView": {
+			const stream = state.streamsById[action.streamId]
+			if (!stream) {
+				return state
+			}
+
+			const nextActiveViewId =
+				action.viewId &&
+				getStreamViews(stream).some((view) => view.id === action.viewId)
+					? action.viewId
+					: null
+			if ((stream.activeViewId ?? null) === nextActiveViewId) {
+				return state
+			}
+
+			return {
+				...state,
+				streamsById: {
+					...state.streamsById,
+					[action.streamId]: {
+						...stream,
+						activeViewId: nextActiveViewId,
+					},
+				},
+			}
+		}
 		case "loadSampleStreams": {
 			let streamsById = state.streamsById
 			let didAddLibraryStream = false
@@ -448,6 +534,7 @@ export default function HomePage() {
 	)
 	const [dialogOpen, setDialogOpen] = useState(false)
 	const [editingStreamId, setEditingStreamId] = useState(null)
+	const [viewsDialogStreamId, setViewsDialogStreamId] = useState(null)
 	const [projectsDialogOpen, setProjectsDialogOpen] = useState(false)
 	const [twitchSession, setTwitchSession] = useState(() =>
 		getStoredTwitchSession(),
@@ -771,6 +858,18 @@ export default function HomePage() {
 
 	const editStream = useCallback((streamId, stream) => {
 		dispatch({ type: "updateStream", streamId, stream })
+	}, [])
+
+	const saveStreamView = useCallback((streamId, view) => {
+		dispatch({ type: "saveStreamView", streamId, view })
+	}, [])
+
+	const deleteStreamView = useCallback((streamId, viewId) => {
+		dispatch({ type: "deleteStreamView", streamId, viewId })
+	}, [])
+
+	const selectStreamView = useCallback((streamId, viewId) => {
+		dispatch({ type: "setStreamActiveView", streamId, viewId })
 	}, [])
 
 	const loadSamples = useCallback(() => {
@@ -1128,6 +1227,8 @@ export default function HomePage() {
 							onVolumeChange={handleStreamVolumeChange}
 							onRemove={removeStream}
 							onEdit={setEditingStreamId}
+							onOpenViews={setViewsDialogStreamId}
+							onSelectView={selectStreamView}
 							onReorder={reorderStreams}
 							onToggleChat={handleToggleCardChat}
 							onEnterFocus={handleEnterFocus}
@@ -1214,11 +1315,23 @@ export default function HomePage() {
 					/>
 				)}
 
-				{editingStreamId && viewerState.streamsById[editingStreamId] && (
+				{editingStreamId &&
+					viewerState.streamsById[editingStreamId] && (
 					<EditStreamDialog
 						stream={viewerState.streamsById[editingStreamId]}
 						onClose={() => setEditingStreamId(null)}
 						onSave={editStream}
+					/>
+				)}
+
+				{viewsDialogStreamId &&
+					viewerState.streamsById[viewsDialogStreamId] && (
+					<StreamViewsDialog
+						stream={viewerState.streamsById[viewsDialogStreamId]}
+						onClose={() => setViewsDialogStreamId(null)}
+						onSaveView={saveStreamView}
+						onDeleteView={deleteStreamView}
+						onSelectView={selectStreamView}
 					/>
 				)}
 

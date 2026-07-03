@@ -45,14 +45,13 @@ export default function ProjectsDialog({
 					<div className="flex items-start justify-between gap-4">
 						<div>
 							<p className="m-0 text-sm font-bold uppercase tracking-[0.14em] text-violet-300">
-								Projects
+								Workspaces
 							</p>
 							<h2 className="mt-1 mb-1">
-								Switch and organize saved stream walls
+								Switch and organize saved experiences
 							</h2>
 							<p className="m-0 text-sm text-slate-300/75">
-								Each project keeps its own stream order and preferred saved
-								chat tab.
+								Each workspace keeps its own stream wall.
 							</p>
 						</div>
 						<button
@@ -67,10 +66,10 @@ export default function ProjectsDialog({
 					<section className="grid gap-3 rounded-[1.2rem] border border-cyan-400/16 bg-slate-950/45 p-4">
 						<div>
 							<p className="m-0 text-sm font-bold uppercase tracking-[0.14em] text-cyan-300">
-								Create Project
+								Create Workspace
 							</p>
 							<p className="mt-1 mb-0 text-sm text-slate-300/75">
-								Start a fresh workspace for a tournament, game, or creator list.
+								Start a fresh stream wall experience.
 							</p>
 						</div>
 
@@ -79,7 +78,7 @@ export default function ProjectsDialog({
 								type="text"
 								value={newProjectName}
 								onChange={(event) => setNewProjectName(event.target.value)}
-								placeholder="Tournament"
+								placeholder="Stream Wall"
 								className="flex-1 rounded-[0.95rem] border border-slate-400/20 bg-slate-900/90 px-4 py-3.5 text-slate-50 focus:outline-2 focus:outline-cyan-400/75 focus:outline-offset-2"
 							/>
 							<button
@@ -91,7 +90,7 @@ export default function ProjectsDialog({
 								}}
 								className="rounded-2xl border-0 bg-gradient-to-br from-fuchsia-600 to-violet-600 px-5 py-3.5 font-bold text-white shadow-[0_18px_30px_rgba(124,58,237,0.28)] transition-all duration-300 cursor-pointer hover:-translate-y-px hover:shadow-[0_24px_40px_rgba(124,58,237,0.34)]"
 							>
-								Create Project
+								Create Workspace
 							</button>
 						</div>
 					</section>
@@ -130,6 +129,9 @@ export default function ProjectsDialog({
 														<h3 className="m-0 truncate text-lg font-semibold">
 															{project.name}
 														</h3>
+														<span className="rounded-full bg-cyan-400/16 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-wide text-cyan-200">
+															Stream Wall
+														</span>
 														{isActive && (
 															<span className="rounded-full bg-cyan-400/16 px-2.5 py-1 text-[0.72rem] font-bold uppercase tracking-wide text-cyan-200">
 																Active
@@ -137,14 +139,15 @@ export default function ProjectsDialog({
 														)}
 													</div>
 													<p className="mt-1 mb-0 text-sm text-slate-300/70">
-														{project.streamIds.length}{" "}
-														{project.streamIds.length === 1
-															? "stream"
-															: "streams"}{" "}
-														|{" "}
-														{project.activeChatStreamId
-															? "Saved chat tab"
-															: "Video wall only"}
+														{`${project.streamIds.length} ${
+															project.streamIds.length === 1
+																? "stream"
+																: "streams"
+														} | ${
+															project.activeChatStreamId
+																? "Saved chat tab"
+																: "Video wall only"
+														}`}
 													</p>
 												</div>
 

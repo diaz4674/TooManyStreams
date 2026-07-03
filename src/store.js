@@ -1,7 +1,8 @@
-import { isStreamChatCapable } from "./utils"
+import { isStreamChatCapable } from "./utils.js"
+import { normalizeStreamViews } from "./streamViews.js"
 
 const STORAGE_KEY = "multiwatch.viewer.state"
-const STORAGE_VERSION = 10
+const STORAGE_VERSION = 12
 const DEFAULT_PROJECT_NAME = "Main View"
 const DEFAULT_MAX_COLUMNS = 3
 
@@ -58,7 +59,7 @@ function isValidStream(stream) {
 	)
 }
 
-function buildProject(
+function buildStandardProject(
 	{
 		id = crypto.randomUUID(),
 		name = DEFAULT_PROJECT_NAME,
@@ -90,6 +91,10 @@ function buildProject(
 	}
 }
 
+function buildProject(rawProject, streamsById = {}) {
+	return buildStandardProject(rawProject, streamsById)
+}
+
 function buildStateFromStreams(streams, options = {}) {
 	const validStreams = streams.filter(isValidStream)
 	const streamsById = Object.fromEntries(
@@ -97,7 +102,7 @@ function buildStateFromStreams(streams, options = {}) {
 	)
 	const firstChatCapableStreamId =
 		validStreams.find((stream) => isStreamChatCapable(stream))?.id ?? null
-	const project = buildProject(
+	const project = buildStandardProject(
 		{
 			name: options.projectName ?? DEFAULT_PROJECT_NAME,
 			streamIds: validStreams.map((stream) => stream.id),
@@ -134,14 +139,16 @@ function loadLegacyState(parsed) {
 function loadVersionedState(parsed) {
 	if (
 		!parsed ||
-		![2, 3, 4, 5, 6, 7, 8, 9, STORAGE_VERSION].includes(parsed.version)
+		![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, STORAGE_VERSION].includes(parsed.version)
 	) {
 		return null
 	}
 
 	const streamEntries =
 		parsed.streamsById && typeof parsed.streamsById === "object"
-			? Object.values(parsed.streamsById).filter(isValidStream)
+			? Object.values(parsed.streamsById)
+					.filter(isValidStream)
+					.map(normalizeStreamViews)
 			: []
 
 	if (
@@ -160,11 +167,15 @@ function loadVersionedState(parsed) {
 					(project) =>
 						project &&
 						project.kind !== "following" &&
-						typeof project.id === "string" &&
-						Array.isArray(project.streamIds),
+						project.kind !== "tournament" &&
+						typeof project.id === "string",
 				)
-				.map((project) =>
-					buildProject(
+				.map((project) => {
+					if (!Array.isArray(project.streamIds)) {
+						return null
+					}
+
+					return buildProject(
 						{
 							...project,
 							streamIds: project.streamIds.filter(
@@ -177,8 +188,9 @@ function loadVersionedState(parsed) {
 							layoutMode: project.layoutMode,
 						},
 						streamsById,
-					),
-				)
+					)
+				})
+				.filter(Boolean)
 		: []
 
 	if (projects.length === 0) {
@@ -186,7 +198,7 @@ function loadVersionedState(parsed) {
 	}
 
 	const referencedIds = new Set(
-		projects.flatMap((project) => project.streamIds),
+		projects.flatMap((project) => project.streamIds ?? []),
 	)
 	const prunedStreamsById = Object.fromEntries(
 		Object.entries(streamsById).filter(([streamId]) =>
@@ -200,8 +212,6 @@ function loadVersionedState(parsed) {
 				streamIds: project.streamIds.filter(
 					(streamId) => streamId in prunedStreamsById,
 				),
-				activeChatStreamId: project.activeChatStreamId,
-				layoutMode: project.layoutMode,
 			},
 			prunedStreamsById,
 		),
@@ -220,10 +230,11 @@ function loadVersionedState(parsed) {
 	}
 }
 
-export function loadPersistedState() {
+export function readPersistedState(raw) {
 	const fallback = getFallbackState()
-	const raw = window.localStorage.getItem(STORAGE_KEY)
-	if (!raw) return fallback
+	if (!raw) {
+		return fallback
+	}
 
 	try {
 		const parsed = JSON.parse(raw)
@@ -242,6 +253,10 @@ export function loadPersistedState() {
 	}
 }
 
+export function loadPersistedState() {
+	return readPersistedState(window.localStorage.getItem(STORAGE_KEY))
+}
+
 export function persistState(state) {
 	const payload = {
 		version: STORAGE_VERSION,
@@ -249,7 +264,7 @@ export function persistState(state) {
 		projects: state.projects.map((project) => ({
 			id: project.id,
 			name: project.name,
-			kind: project.kind,
+			kind: STANDARD_PROJECT_KIND,
 			streamIds: project.streamIds,
 			activeChatStreamId: project.activeChatStreamId,
 			layoutMode: project.layoutMode === "matrix" ? "matrix" : "auto",

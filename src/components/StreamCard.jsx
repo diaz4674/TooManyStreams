@@ -1,7 +1,14 @@
 import { memo, useEffect, useRef, useState } from "react"
 import EmbeddedStreamChat from "./EmbeddedStreamChat"
 import StreamPlayer from "./StreamPlayer"
-import { isStreamChatCapable } from "../utils"
+import { getTwitchChannelUrl, isStreamChatCapable } from "../utils"
+import {
+	canCreateTwitchClips,
+	createTwitchClip,
+	getStoredTwitchSession,
+	TwitchAuthorizationError,
+} from "../twitchApi"
+import { getActiveStreamCrop, getStreamViews } from "../streamViews"
 
 const TWITCH_CARD_AUTOPLAY_THRESHOLD = 0.6
 const APP_RESUME_DEDUP_WINDOW_MS = 400
@@ -44,10 +51,25 @@ function FocusActionButton({ icon, label, onClick }) {
 	)
 }
 
-function FocusVolumeControl({ streamTitle, volume, onChange }) {
+function FocusVolumeControl({ streamTitle, volume, onChange, onToggleMute }) {
+	const isMuted = volume === 0
 	return (
 		<label className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-slate-950/78 px-3 py-2 text-white shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
-			<i className="fa-solid fa-volume-low text-[0.8rem] text-cyan-50/92" />
+			<button
+				type="button"
+				onClick={onToggleMute}
+				aria-label={
+					isMuted ? `Unmute ${streamTitle}` : `Mute ${streamTitle}`
+				}
+				aria-pressed={isMuted}
+				className="stream-card-interactive inline-flex items-center justify-center text-cyan-50/92 cursor-pointer transition-colors hover:text-white"
+			>
+				<i
+					className={`fa-solid ${
+						isMuted ? "fa-volume-xmark" : "fa-volume-low"
+					} text-[0.8rem]`}
+				/>
+			</button>
 			<span className="text-[0.66rem] font-bold uppercase tracking-[0.14em] text-cyan-50/88">
 				Volume
 			</span>
@@ -76,6 +98,8 @@ function StreamCardComponent({
 	onRemove,
 	onEdit,
 	onFocus,
+	onOpenViews,
+	onSelectView,
 	forcedMuted,
 	playbackToken = 0,
 	isFocused = false,
@@ -99,7 +123,20 @@ function StreamCardComponent({
 	canReorderStreamMembership = true,
 }) {
 	const isFocusPresentation = presentation === "focus"
-	const showVolume = stream.platform === "youtube"
+	// Duo mode shows two co-equal cinema tiles (placement "left"/"right"); both
+	// should get native Twitch controls, not just the primary one.
+	const isDuoFocusTile =
+		focusTilePlacement === "left" || focusTilePlacement === "right"
+	// The primary (and, in duo mode, both) cinema tiles rebuild the Twitch
+	// player with native controls (pause/quality/clip/fullscreen), which
+	// include their own volume UI.
+	const showTwitchControls =
+		isFocusPresentation &&
+		(focusTileRole === "primary" || isDuoFocusTile) &&
+		stream.platform === "twitch"
+	const showVolume =
+		stream.platform === "youtube" ||
+		(stream.platform === "twitch" && !showTwitchControls)
 	const isChatCapable = isStreamChatCapable(stream)
 	const showInlineChatToggle =
 		!isFocusPresentation && isChatCapable && typeof onToggleChat === "function"
@@ -115,20 +152,40 @@ function StreamCardComponent({
 		focusTilePlacement === "bottom" &&
 		typeof onRemoveFromFocus === "function"
 	const showFocusVolumeOnHover = isFocusPresentation && showVolume
-	const showEmbeddedFocusOverlay =
-		isFocusPresentation &&
-		!(stream.platform === "twitch" && focusTileRole === "primary")
+	// Twitch renders chromeless, so every focus tile needs the app overlay for
+	// volume and actions — including the primary Twitch tile.
+	const showEmbeddedFocusOverlay = isFocusPresentation
 	const dragHandleLabel = "Drag to reorder stream"
 	const shouldCropToFill =
 		!preserveFullFrame &&
 		stream.platform === "youtube" &&
 		(isFocusPresentation ? focusTileRole === "companion" : fluidVideo)
+	const streamViews = getStreamViews(stream)
+	const activeCrop = getActiveStreamCrop(stream)
+	const twitchChannelUrl = getTwitchChannelUrl(stream)
+	// Native Twitch controls (cinema primary/duo) already expose a clip button;
+	// the chromeless embeds do not, so surface our own clip affordance there.
+	const showClipButton = Boolean(twitchChannelUrl) && !showTwitchControls
+	const showViewsButton =
+		!isFocusPresentation && typeof onOpenViews === "function"
+	const showViewSwitcher =
+		!isFocusPresentation &&
+		streamViews.length > 0 &&
+		typeof onSelectView === "function"
 	const articleRef = useRef(null)
 	const isCardVisibleRef = useRef(isFocusPresentation)
 	const lastAppResumeAtRef = useRef(0)
 	const cinemaAutoplayTimeoutsRef = useRef([])
 	const [viewportPlaybackToken, setViewportPlaybackToken] = useState(0)
 	const combinedPlaybackToken = playbackToken + viewportPlaybackToken
+	const [clipStatus, setClipStatus] = useState("idle")
+	const [clipError, setClipError] = useState("")
+	const clipErrorTimeoutRef = useRef(null)
+
+	useEffect(
+		() => () => window.clearTimeout(clipErrorTimeoutRef.current),
+		[],
+	)
 
 	const getCardVisibility = () => {
 		const node = articleRef.current
@@ -156,6 +213,80 @@ function StreamCardComponent({
 
 	const handleFocusVolumeChange = (nextVolume) => {
 		onVolumeChange(stream.id, nextVolume)
+	}
+
+	// Remember the last audible level so unmuting restores it instead of a
+	// hard-coded default. Muting sets volume to 0; unmuting returns here.
+	const lastNonZeroVolumeRef = useRef(volume > 0 ? volume : 100)
+	useEffect(() => {
+		if (volume > 0) {
+			lastNonZeroVolumeRef.current = volume
+		}
+	}, [volume])
+
+	const showClipError = (message) => {
+		setClipStatus("error")
+		setClipError(message)
+		window.clearTimeout(clipErrorTimeoutRef.current)
+		// Reconnect guidance is longer than a transient failure, so give it more
+		// time on screen before the button reverts to the scissors icon.
+		clipErrorTimeoutRef.current = window.setTimeout(() => {
+			setClipStatus("idle")
+		}, 7000)
+	}
+
+	const handleCreateClip = async () => {
+		if (clipStatus === "pending") {
+			return
+		}
+
+		const session = getStoredTwitchSession()
+		if (!session?.accessToken) {
+			// Not connected: send them to the channel page where they can sign in
+			// and clip natively.
+			window.open(twitchChannelUrl, "_blank", "noopener,noreferrer")
+			return
+		}
+
+		if (!canCreateTwitchClips(session)) {
+			// Connected before clips:edit was requested — an implicit-grant token
+			// can't gain the scope, so the only fix is a fresh authorization.
+			showClipError(
+				"Clipping needs a reconnect: disconnect and reconnect Twitch, then try again.",
+			)
+			return
+		}
+
+		// Open the tab synchronously inside the click so popup blockers allow
+		// it, then point it at the clip editor once Helix responds.
+		const clipWindow = window.open("", "_blank")
+		if (clipWindow) {
+			clipWindow.opener = null
+		}
+
+		setClipStatus("pending")
+		try {
+			const clip = await createTwitchClip(stream.channelName, session)
+			if (clipWindow) {
+				clipWindow.location = clip.edit_url
+			}
+			setClipStatus("idle")
+		} catch (error) {
+			clipWindow?.close()
+			showClipError(
+				error instanceof TwitchAuthorizationError
+					? "Twitch connection expired: disconnect and reconnect Twitch, then try again."
+					: error?.message || "Clip could not be created. Please try again.",
+			)
+		}
+	}
+
+	const handleToggleMute = () => {
+		if (volume > 0) {
+			onVolumeChange(stream.id, 0)
+		} else {
+			onVolumeChange(stream.id, lastNonZeroVolumeRef.current || 100)
+		}
 	}
 
 	useEffect(() => {
@@ -337,13 +468,65 @@ function StreamCardComponent({
 									<PlatformLogo platform={stream.platform} />
 									<span className="truncate">{stream.title}</span>
 								</div>
-								<p className="m-0 truncate text-[0.72rem] uppercase tracking-[0.14em] text-slate-300/62">
-									{stream.channelName}
-								</p>
+								{twitchChannelUrl ? (
+									<a
+										href={twitchChannelUrl}
+										target="_blank"
+										rel="noreferrer noopener"
+										title={`Open ${stream.channelName} on Twitch`}
+										className="stream-card-interactive m-0 block truncate text-[0.72rem] uppercase tracking-[0.14em] text-slate-300/62 no-underline transition-colors hover:text-violet-300 hover:underline"
+									>
+										{stream.channelName}
+									</a>
+								) : (
+									<p className="m-0 truncate text-[0.72rem] uppercase tracking-[0.14em] text-slate-300/62">
+										{stream.channelName}
+									</p>
+								)}
 							</div>
 						</div>
 
 						<div className="flex shrink-0 items-center gap-2">
+							{showClipButton && (
+								<button
+									type="button"
+									onClick={handleCreateClip}
+									aria-label={`Clip ${stream.title} on Twitch`}
+									title={clipStatus === "error" ? clipError : "Create clip"}
+									className={`stream-card-interactive inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 cursor-pointer transition-colors ${
+										clipStatus === "error"
+											? "bg-rose-500/24 text-rose-100"
+											: "bg-violet-500/18 text-violet-100 hover:bg-violet-500/28"
+									}`}
+								>
+									<i
+										className={`fa-solid text-[0.7rem] ${
+											clipStatus === "pending"
+												? "fa-spinner fa-spin"
+												: clipStatus === "error"
+													? "fa-triangle-exclamation"
+													: "fa-scissors"
+										}`}
+									/>
+								</button>
+							)}
+
+							{showViewsButton && (
+								<button
+									type="button"
+									onClick={() => onOpenViews(stream.id)}
+									aria-label={`Manage saved views for ${stream.title}`}
+									title="Saved views (crop)"
+									className={`stream-card-interactive inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 cursor-pointer transition-colors ${
+										activeCrop
+											? "bg-cyan-400/24 text-cyan-50 shadow-[0_0_0_1px_rgba(34,211,238,0.28)]"
+											: "bg-cyan-400/12 text-cyan-100 hover:bg-cyan-400/20"
+									}`}
+								>
+									<i className="fa-solid fa-crop-simple text-[0.7rem]" />
+								</button>
+							)}
+
 							{onFocus && (
 								<button
 									type="button"
@@ -398,6 +581,8 @@ function StreamCardComponent({
 						volume={volume}
 						muted={forcedMuted}
 						cropToFill={shouldCropToFill}
+						crop={activeCrop}
+						showTwitchControls={showTwitchControls}
 						playbackToken={combinedPlaybackToken}
 						onReady={onPlayerReady}
 						loadSessionKey={loadSessionKey}
@@ -424,6 +609,30 @@ function StreamCardComponent({
 											: "opacity-100"
 									}`}
 								>
+									{showClipButton && (
+										<FocusActionButton
+											icon={
+												clipStatus === "pending"
+													? "fa-spinner fa-spin"
+													: clipStatus === "error"
+														? "fa-triangle-exclamation"
+														: "fa-scissors"
+											}
+											label={
+												clipStatus === "error"
+													? clipError
+													: `Clip ${stream.title} on Twitch`
+											}
+											onClick={handleCreateClip}
+										/>
+									)}
+									{typeof onOpenViews === "function" && (
+										<FocusActionButton
+											icon="fa-crop-simple"
+											label={`Crop ${stream.title}`}
+											onClick={() => onOpenViews(stream.id)}
+										/>
+									)}
 									{focusTileRole === "companion" &&
 										typeof onPromoteFocus === "function" && (
 											<FocusActionButton
@@ -465,16 +674,47 @@ function StreamCardComponent({
 							<div className="flex items-end justify-end">
 								<div
 									className={`flex w-full items-end justify-end gap-3 transition-opacity duration-200 ${
-										showFocusVolumeOnHover
+										showFocusVolumeOnHover || streamViews.length > 0
 											? "opacity-0 group-hover/focus-tile:opacity-100 group-focus-within/focus-tile:opacity-100"
 											: "opacity-100"
 									}`}
 								>
+									{streamViews.length > 0 &&
+										typeof onSelectView === "function" && (
+											<label className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-slate-950/78 px-3 py-2 text-white shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur">
+												<i className="fa-solid fa-crop-simple text-[0.72rem] text-cyan-100/88" />
+												<select
+													value={stream.activeViewId ?? ""}
+													onChange={(event) =>
+														onSelectView(
+															stream.id,
+															event.target.value || null,
+														)
+													}
+													aria-label={`Saved view for ${stream.title}`}
+													className="stream-card-interactive max-w-36 truncate border-0 bg-transparent text-[0.72rem] font-semibold text-white cursor-pointer focus:outline-none"
+												>
+													<option value="" className="bg-slate-900">
+														Full frame
+													</option>
+													{streamViews.map((view) => (
+														<option
+															key={view.id}
+															value={view.id}
+															className="bg-slate-900"
+														>
+															{view.name}
+														</option>
+													))}
+												</select>
+											</label>
+										)}
 									{showVolume && (
 										<FocusVolumeControl
 											streamTitle={stream.title}
 											volume={volume}
 											onChange={handleFocusVolumeChange}
+											onToggleMute={handleToggleMute}
 										/>
 									)}
 								</div>
@@ -499,13 +739,34 @@ function StreamCardComponent({
 
 				{!isFocusPresentation && (
 					<div className="mt-auto flex shrink-0 items-center gap-3 border-t border-cyan-400/14 px-3 py-2.5">
-						<div className="min-w-0 flex-1 truncate text-[0.74rem] uppercase tracking-[0.14em] text-slate-300/65">
-							{!canManageStreamMembership
-								? "Managed by your Twitch follows"
-								: stream.platform === "twitch"
-									? "Native Twitch controls in player"
-									: "YouTube volume available"}
-						</div>
+						{showViewSwitcher ? (
+							<label className="flex min-w-0 flex-1 items-center gap-2 text-slate-300/74">
+								<i className="fa-solid fa-crop-simple shrink-0 text-[0.7rem] text-cyan-200/80" />
+								<select
+									value={stream.activeViewId ?? ""}
+									onChange={(event) =>
+										onSelectView(stream.id, event.target.value || null)
+									}
+									aria-label={`Saved view for ${stream.title}`}
+									className="stream-card-interactive w-full min-w-0 truncate rounded-lg border border-cyan-400/16 bg-slate-900/80 px-2 py-1 text-[0.72rem] font-semibold text-slate-100 cursor-pointer focus:outline-2 focus:outline-cyan-400/75"
+								>
+									<option value="">Full frame</option>
+									{streamViews.map((view) => (
+										<option key={view.id} value={view.id}>
+											{view.name}
+										</option>
+									))}
+								</select>
+							</label>
+						) : (
+							<div className="min-w-0 flex-1 truncate text-[0.74rem] uppercase tracking-[0.14em] text-slate-300/65">
+								{!canManageStreamMembership
+									? "Managed by your Twitch follows"
+									: stream.platform === "twitch"
+										? "Twitch volume available"
+										: "YouTube volume available"}
+							</div>
+						)}
 
 						<div className="flex shrink-0 items-center gap-2">
 							<button
@@ -519,7 +780,25 @@ function StreamCardComponent({
 
 							{showVolume && (
 								<label className="flex shrink-0 w-32 items-center gap-2 text-slate-300/74">
-									<i className="fa-solid fa-volume-low text-[0.7rem]" />
+									<button
+										type="button"
+										onClick={handleToggleMute}
+										aria-label={
+											volume === 0
+												? `Unmute ${stream.title}`
+												: `Mute ${stream.title}`
+										}
+										aria-pressed={volume === 0}
+										className="stream-card-interactive inline-flex items-center justify-center cursor-pointer transition-colors hover:text-cyan-200"
+									>
+										<i
+											className={`fa-solid ${
+												volume === 0
+													? "fa-volume-xmark"
+													: "fa-volume-low"
+											} text-[0.7rem]`}
+										/>
+									</button>
 									<input
 										type="range"
 										min="0"

@@ -1,7 +1,8 @@
 import { create } from "zustand"
+import { loadProjectFocus, persistProjectFocus } from "./wallPersistence.js"
 
 const DEFAULT_FOCUS_LAYOUT = "single"
-const MAX_FOCUSED_STREAMS = 5
+const MAX_FOCUSED_STREAMS = 8
 const VALID_FOCUS_LAYOUTS = new Set(["single", "stacked", "equal", "duo"])
 
 function uniqueIds(ids) {
@@ -102,6 +103,42 @@ function getNextFocusChatStreamId({
 	return focusedChatCapableStreamIds[0]
 }
 
+// Records the current cinema arrangement (companions + layout) under its
+// primary stream so re-entering that stream's cinema mode restores it.
+function rememberFocusArrangement(savedFocusByPrimaryId, focusState) {
+	const primaryId = focusState.focusedStreamIds[0]
+	if (!primaryId) {
+		return savedFocusByPrimaryId
+	}
+
+	return {
+		...savedFocusByPrimaryId,
+		[primaryId]: {
+			focusedStreamIds: focusState.focusedStreamIds,
+			focusLayout: focusState.focusLayout,
+		},
+	}
+}
+
+// Drops saved arrangements (and companions within them) whose streams are no
+// longer on the wall. Arrangements keyed by a primary that left the wall are
+// removed entirely.
+function pruneSavedFocusByPrimaryId(savedFocusByPrimaryId, orderedStreamIds) {
+	return Object.fromEntries(
+		Object.entries(savedFocusByPrimaryId)
+			.filter(([primaryId]) => orderedStreamIds.includes(primaryId))
+			.map(([primaryId, entry]) => [
+				primaryId,
+				{
+					focusLayout: entry.focusLayout,
+					focusedStreamIds: entry.focusedStreamIds.filter((id) =>
+						orderedStreamIds.includes(id),
+					),
+				},
+			]),
+	)
+}
+
 function normalizeFocusState({
 	focusedStreamIds,
 	focusLayout,
@@ -143,6 +180,7 @@ export const useWallStore = create((set) => ({
 	activeChatStreamId: null,
 	expandedCardChatStreamId: null,
 	...getDefaultFocusState(),
+	savedFocusByPrimaryId: {},
 	streamVolumes: {},
 	syncProjectState({
 		projectId,
@@ -182,6 +220,15 @@ export const useWallStore = create((set) => ({
 					nextOrderedIds.includes(id),
 				),
 			)
+			// On a project switch (including the first sync after a page reload),
+			// restore that project's persisted cinema arrangements instead of
+			// starting empty, keeping only streams still on the wall.
+			const nextSavedFocusByPrimaryId = pruneSavedFocusByPrimaryId(
+				projectDidChange
+					? loadProjectFocus(projectId)
+					: state.savedFocusByPrimaryId,
+				nextOrderedIds,
+			)
 			const nextChatOpen =
 				nextChatCapableIds.length === 0 ? false : state.chatOpen
 
@@ -213,6 +260,7 @@ export const useWallStore = create((set) => ({
 				activeChatStreamId: nextActiveChatStreamId,
 				expandedCardChatStreamId: nextExpandedCardChatStreamId,
 				...nextFocusState,
+				savedFocusByPrimaryId: nextSavedFocusByPrimaryId,
 				streamVolumes: nextStreamVolumes,
 			}
 		})
@@ -266,17 +314,35 @@ export const useWallStore = create((set) => ({
 				return state
 			}
 
-			const nextFocusedStreamIds = [streamId]
+			// Restore the companion set + layout last used for this stream, keeping
+			// only companions that still exist on the wall.
+			const savedArrangement = state.savedFocusByPrimaryId[streamId]
+			const savedCompanionIds = (savedArrangement?.focusedStreamIds ?? [])
+				.filter(
+					(id) => id !== streamId && state.orderedStreamIds.includes(id),
+				)
+			const restoredFocusedStreamIds = [streamId, ...savedCompanionIds]
+			const restoredFocusLayout =
+				savedCompanionIds.length > 0 &&
+				savedArrangement &&
+				isValidFocusLayout(savedArrangement.focusLayout)
+					? savedArrangement.focusLayout
+					: DEFAULT_FOCUS_LAYOUT
+
+			const nextFocusState = normalizeFocusState({
+				focusedStreamIds: restoredFocusedStreamIds,
+				focusLayout: restoredFocusLayout,
+				chatCapableStreamIds: state.chatCapableStreamIds,
+				preferredChatStreamId: streamId,
+			})
 
 			return {
 				...state,
-				...getDefaultFocusState(),
-				focusedStreamIds: nextFocusedStreamIds,
-				focusChatStreamId: getNextFocusChatStreamId({
-					focusedStreamIds: nextFocusedStreamIds,
-					chatCapableStreamIds: state.chatCapableStreamIds,
-					preferredStreamId: streamId,
-				}),
+				...nextFocusState,
+				savedFocusByPrimaryId: rememberFocusArrangement(
+					state.savedFocusByPrimaryId,
+					nextFocusState,
+				),
 			}
 		})
 	},
@@ -304,6 +370,10 @@ export const useWallStore = create((set) => ({
 			return {
 				...state,
 				...nextFocusState,
+				savedFocusByPrimaryId: rememberFocusArrangement(
+					state.savedFocusByPrimaryId,
+					nextFocusState,
+				),
 			}
 		})
 	},
@@ -328,6 +398,10 @@ export const useWallStore = create((set) => ({
 			return {
 				...state,
 				...nextFocusState,
+				savedFocusByPrimaryId: rememberFocusArrangement(
+					state.savedFocusByPrimaryId,
+					nextFocusState,
+				),
 			}
 		})
 	},
@@ -353,6 +427,10 @@ export const useWallStore = create((set) => ({
 			return {
 				...state,
 				...nextFocusState,
+				savedFocusByPrimaryId: rememberFocusArrangement(
+					state.savedFocusByPrimaryId,
+					nextFocusState,
+				),
 			}
 		})
 	},
@@ -362,15 +440,21 @@ export const useWallStore = create((set) => ({
 				return state
 			}
 
+			const nextFocusState = normalizeFocusState({
+				focusedStreamIds: state.focusedStreamIds,
+				focusLayout: layout,
+				chatCapableStreamIds: state.chatCapableStreamIds,
+				currentChatStreamId: state.focusChatStreamId,
+				focusChatOpen: state.focusChatOpen,
+			})
+
 			return {
 				...state,
-				...normalizeFocusState({
-					focusedStreamIds: state.focusedStreamIds,
-					focusLayout: layout,
-					chatCapableStreamIds: state.chatCapableStreamIds,
-					currentChatStreamId: state.focusChatStreamId,
-					focusChatOpen: state.focusChatOpen,
-				}),
+				...nextFocusState,
+				savedFocusByPrimaryId: rememberFocusArrangement(
+					state.savedFocusByPrimaryId,
+					nextFocusState,
+				),
 			}
 		})
 	},
@@ -418,3 +502,15 @@ export const useWallStore = create((set) => ({
 		}))
 	},
 }))
+
+// Persist cinema arrangements so companions survive a page reload. Runs on any
+// change to the saved arrangements or the active project.
+useWallStore.subscribe((state, prevState) => {
+	if (
+		state.projectId &&
+		(state.savedFocusByPrimaryId !== prevState.savedFocusByPrimaryId ||
+			state.projectId !== prevState.projectId)
+	) {
+		persistProjectFocus(state.projectId, state.savedFocusByPrimaryId)
+	}
+})
