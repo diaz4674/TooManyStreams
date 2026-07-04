@@ -1032,7 +1032,7 @@ function FocusOverlayChrome({
 						height: chatSize.height,
 					}}
 				>
-					<div className="pointer-events-auto relative flex h-full w-full flex-col overflow-hidden rounded-[1.7rem]  bg-[linear-gradient(180deg,rgba(12,18,36,0.96),rgba(8,12,28,0.98))] shadow-[0_32px_90px_rgba(2,6,23,0.48)]">
+					<div className="pointer-events-auto relative flex h-full w-full flex-col overflow-hidden rounded-[1.7rem]  bg-[linear-gradient(180deg,rgba(12,18,36,0.96),rgba(8,12,28,0.98))]">
 						<div className="pointer-events-none absolute inset-0">
 							<FocusChatResizeHandle
 								className="inset-x-0 top-0"

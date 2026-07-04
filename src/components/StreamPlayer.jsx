@@ -310,6 +310,14 @@ function TwitchEmbed({
 	const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 	const containerSizeRef = useRef(containerSize)
 	const readySignalSentRef = useRef(false)
+	// With native controls the user owns mute/volume via the Twitch UI, so
+	// audio is auto-restored only once per player build (after the first
+	// force-muted playback nudge succeeds).
+	const controlsAudioRestoredRef = useRef(false)
+	// Twitch's isPaused() reports the SDK's *intent*, not reality: a blocked
+	// player can report "playing" while its video element never loads. Only
+	// the PLAYING event proves actual playback, so recovery loops key off it.
+	const isActuallyPlayingRef = useRef(false)
 	mutedRef.current = muted
 	volumeRef.current = volume
 	playbackTokenRef.current = playbackToken
@@ -342,12 +350,15 @@ function TwitchEmbed({
 
 		const nextVolume = volumeRef.current
 		player.setVolume?.(Math.min(Math.max(nextVolume / 100, 0), 1))
+		// Native-controls tiles (cinema mode) are an explicit "watch this"
+		// request, so they start audible at the stream's volume; chromeless
+		// grid tiles stay muted until the user touches their volume slider.
 		player.setMuted(
 			Boolean(mutedRef.current) ||
 				nextVolume === 0 ||
-				!userVolumeIntentRef.current,
+				(!showControls && !userVolumeIntentRef.current),
 		)
-	}, [])
+	}, [showControls])
 
 	const notifyReady = useCallback(() => {
 		if (readySignalSentRef.current) {
@@ -444,7 +455,7 @@ function TwitchEmbed({
 
 				// Already playing: stop nudging. Every play() call re-shows the
 				// Twitch title overlay and resets its fade-out timer.
-				if (typeof player.isPaused === "function" && !player.isPaused()) {
+				if (isActuallyPlayingRef.current) {
 					clearPendingPlaybackRequest()
 					return
 				}
@@ -466,12 +477,7 @@ function TwitchEmbed({
 			}
 
 			const player = playerRef.current
-			if (
-				readyRef.current &&
-				player &&
-				typeof player.isPaused === "function" &&
-				!player.isPaused()
-			) {
+			if (readyRef.current && player && isActuallyPlayingRef.current) {
 				// Playback is already running; re-requesting it only flashes the
 				// Twitch title overlay.
 				clearPendingPlaybackRequest()
@@ -506,6 +512,8 @@ function TwitchEmbed({
 		let handlePlaybackBlocked = null
 
 		setSdkFailed(false)
+		controlsAudioRestoredRef.current = false
+		isActuallyPlayingRef.current = false
 		loadTwitchSdk()
 			.then((loadedTwitch) => {
 				if (cancelled) {
@@ -540,7 +548,27 @@ function TwitchEmbed({
 					}
 
 					readyRef.current = true
-					applyAudioSettings()
+					if (showControls) {
+						if (
+							isActuallyPlayingRef.current &&
+							!controlsAudioRestoredRef.current
+						) {
+							// PLAYING arrived before READY, so the one-shot audio
+							// restore was skipped; apply it now.
+							controlsAudioRestoredRef.current = true
+							applyAudioSettings()
+						} else {
+							// Only pre-set the volume. Unmuting here would turn
+							// Twitch's pending muted autoplay into an unmuted
+							// autoplay attempt, which browsers block; audio is
+							// enabled on the first PLAYING event instead.
+							player.setVolume?.(
+								Math.min(Math.max(volumeRef.current / 100, 0), 1),
+							)
+						}
+					} else {
+						applyAudioSettings()
+					}
 					syncPlayerFrame()
 					notifyReady()
 
@@ -549,16 +577,22 @@ function TwitchEmbed({
 					}
 				}
 				handlePlaying = () => {
+					isActuallyPlayingRef.current = true
 					clearPendingPlaybackRequest()
 					// Playback nudges force-mute; restore the user's chosen audio
-					// once the stream is actually playing. Skip when native
-					// controls are shown so we don't override the user's own
-					// volume/mute clicks on the Twitch UI.
+					// once the stream is actually playing. With native controls
+					// only do this for the first playing event of this player
+					// build so we don't override the user's own volume/mute
+					// clicks on the Twitch UI afterwards.
 					if (!showControls) {
+						applyAudioSettings()
+					} else if (!controlsAudioRestoredRef.current && readyRef.current) {
+						controlsAudioRestoredRef.current = true
 						applyAudioSettings()
 					}
 				}
 				handlePause = () => {
+					isActuallyPlayingRef.current = false
 					const pendingToken = pendingPlaybackRef.current.token
 					if (pendingToken > 0 && Date.now() < pendingPlaybackRef.current.deadline) {
 						startPendingPlaybackRequest(pendingToken)
@@ -576,6 +610,14 @@ function TwitchEmbed({
 					const pendingToken = pendingPlaybackRef.current.token
 					if (pendingToken > 0) {
 						startPendingPlaybackRequest(pendingToken)
+						return
+					}
+
+					// Blocked with no recovery window open (e.g. the rebuilt
+					// cinema player lost its initial autoplay attempt): start a
+					// muted playback request instead of staying paused forever.
+					if (playbackTokenRef.current > 0) {
+						startPendingPlaybackRequest(playbackTokenRef.current)
 					}
 				}
 				player.addEventListener(Twitch.Player.READY, handleReady)

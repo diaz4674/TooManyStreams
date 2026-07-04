@@ -153,8 +153,14 @@ function StreamCardComponent({
 		typeof onRemoveFromFocus === "function"
 	const showFocusVolumeOnHover = isFocusPresentation && showVolume
 	// Twitch renders chromeless, so every focus tile needs the app overlay for
-	// volume and actions — including the primary Twitch tile.
-	const showEmbeddedFocusOverlay = isFocusPresentation
+	// volume and actions — including the primary Twitch tile. The overlay is
+	// only MOUNTED while the tile is hovered: any element layered over the
+	// player iframe (even transparent and pointer-events-none) makes Chrome's
+	// occlusion tracker report the embed as not visible, and Twitch then
+	// refuses autoplay/play() with an "Autoplay disabled: style visibility"
+	// error. CSS opacity tricks don't help — the element must not exist.
+	const [focusTileHovered, setFocusTileHovered] = useState(false)
+	const showEmbeddedFocusOverlay = isFocusPresentation && focusTileHovered
 	const dragHandleLabel = "Drag to reorder stream"
 	const shouldCropToFill =
 		!preserveFullFrame &&
@@ -438,9 +444,21 @@ function StreamCardComponent({
 	return (
 		<article
 			ref={articleRef}
+			onPointerEnter={
+				isFocusPresentation ? () => setFocusTileHovered(true) : undefined
+			}
+			onPointerLeave={
+				isFocusPresentation ? () => setFocusTileHovered(false) : undefined
+			}
+			onFocusCapture={
+				isFocusPresentation ? () => setFocusTileHovered(true) : undefined
+			}
 			className={`relative flex h-full min-w-0 overflow-hidden ${
 				isFocusPresentation
-					? "group/focus-tile rounded-[1.7rem] border border-white/10 bg-slate-950/94 shadow-[0_28px_90px_rgba(2,6,23,0.62)]"
+					// No box-shadow on cinema tiles: shadow ink painting over a
+					// neighboring tile's Twitch iframe trips Chrome's occlusion
+					// tracker and Twitch then blocks autoplay ("style visibility").
+					? "group/focus-tile rounded-[1.7rem] border border-white/10 bg-slate-950/94"
 					: "rounded-[1.45rem] border border-cyan-400/18 bg-[linear-gradient(180deg,rgba(22,18,55,0.96),rgba(10,14,32,0.98))] shadow-[0_24px_60px_rgba(8,15,35,0.48)]"
 			} transition-[transform,box-shadow,opacity] duration-300 ${
 				isDragging ? "z-20 rotate-[1deg] opacity-90" : ""

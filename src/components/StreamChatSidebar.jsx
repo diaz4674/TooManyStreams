@@ -45,8 +45,11 @@ export default function StreamChatSidebar({
 	const showTabs = streams.length > 1 && typeof onSelectStream === "function"
 	const asideClassName = isImmersive
 		? "flex h-full w-full flex-col overflow-hidden border-l border-white/10 bg-slate-950"
+		// Rail variants sit beside cinema-mode players: no box-shadow, because
+		// shadow ink over the Twitch iframe trips Chrome's occlusion tracker
+		// and Twitch then refuses autoplay ("style visibility").
 		: isRailVariant
-		? "flex h-full w-full flex-col overflow-hidden rounded-[1.6rem] border border-cyan-400/16 bg-[linear-gradient(180deg,rgba(14,22,43,0.95),rgba(9,13,29,0.98))] shadow-[0_28px_70px_rgba(2,6,23,0.42)]"
+		? "flex h-full w-full flex-col overflow-hidden rounded-[1.6rem] border border-cyan-400/16 bg-[linear-gradient(180deg,rgba(14,22,43,0.95),rgba(9,13,29,0.98))]"
 		: "sticky top-6 w-full max-w-[22rem] overflow-hidden rounded-[1.6rem] border border-cyan-400/16 bg-[linear-gradient(180deg,rgba(14,22,43,0.95),rgba(9,13,29,0.98))] shadow-[0_28px_70px_rgba(2,6,23,0.42)] max-xl:max-w-none"
 	const frameClassName = isRailVariant || isImmersive
 		? "h-full min-h-0 w-full border-0 bg-slate-950"
