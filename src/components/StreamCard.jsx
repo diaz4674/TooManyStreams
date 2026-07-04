@@ -152,15 +152,18 @@ function StreamCardComponent({
 		focusTilePlacement === "bottom" &&
 		typeof onRemoveFromFocus === "function"
 	const showFocusVolumeOnHover = isFocusPresentation && showVolume
-	// Twitch renders chromeless, so every focus tile needs the app overlay for
-	// volume and actions — including the primary Twitch tile. The overlay is
-	// only MOUNTED while the tile is hovered: any element layered over the
-	// player iframe (even transparent and pointer-events-none) makes Chrome's
-	// occlusion tracker report the embed as not visible, and Twitch then
-	// refuses autoplay/play() with an "Autoplay disabled: style visibility"
-	// error. CSS opacity tricks don't help — the element must not exist.
+	// Chromeless focus tiles (companions, YouTube) need the app overlay for
+	// volume and actions. The overlay is only MOUNTED while the tile is
+	// hovered: any element layered over the player iframe (even transparent
+	// and pointer-events-none) makes Chrome's occlusion tracker report the
+	// embed as not visible, and Twitch then refuses autoplay — and pauses
+	// running playback — citing "style visibility". CSS opacity tricks don't
+	// help — the element must not exist. Native-controls tiles get no app
+	// overlay at all for the same reason: Twitch's own UI covers playback,
+	// and crop/close live in the cinema top bar.
 	const [focusTileHovered, setFocusTileHovered] = useState(false)
-	const showEmbeddedFocusOverlay = isFocusPresentation && focusTileHovered
+	const showEmbeddedFocusOverlay =
+		isFocusPresentation && focusTileHovered && !showTwitchControls
 	const dragHandleLabel = "Drag to reorder stream"
 	const shouldCropToFill =
 		!preserveFullFrame &&

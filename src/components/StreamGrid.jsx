@@ -703,6 +703,7 @@ function FocusOverlayChrome({
 	allowCompactEmptySlots = false,
 	renderFloatingChat = true,
 	badgeLabel = "Cinema Mode",
+	cropAction = null,
 	secondaryAction = null,
 	primaryAction = null,
 	onDismissOverflowSlot,
@@ -953,6 +954,18 @@ function FocusOverlayChrome({
 							}`}
 						>
 							{focusChatOpen ? "Hide Chat" : "Open Chat"}
+						</button>
+					)}
+
+					{cropAction && (
+						<button
+							type="button"
+							onClick={cropAction.onClick}
+							title={cropAction.title}
+							className="rounded-full bg-slate-950/78 px-4 py-2 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-slate-100 shadow-[0_10px_28px_rgba(2,6,23,0.34)] backdrop-blur transition-colors cursor-pointer hover:bg-slate-900/92"
+						>
+							<i className="fa-solid fa-crop-simple mr-1.5 text-[0.62rem]" />
+							Crop
 						</button>
 					)}
 
@@ -2276,6 +2289,18 @@ export default function StreamGrid({
 						showEmptySlots={!isSingleFocusLayout}
 						allowCompactEmptySlots={isDuoFocusLayout}
 						renderFloatingChat={!hasDuoChatRail}
+						cropAction={
+							// Native-controls Twitch primaries render no app overlay
+							// (anything over the iframe makes Twitch pause playback),
+							// so their crop affordance lives up here instead.
+							primaryFocusedStream?.platform === "twitch" &&
+							typeof onOpenViews === "function"
+								? {
+										title: `Crop ${primaryFocusedStream.title}`,
+										onClick: () => onOpenViews(primaryFocusedStream.id),
+									}
+								: null
+						}
 						secondaryAction={
 							canRevealStackedOverflow
 								? {
