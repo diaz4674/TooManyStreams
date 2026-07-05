@@ -3,6 +3,7 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<!-- page-head:start (replaced per-route by scripts/prerender.mjs) -->
 		<title>TooManyStreams - Watch Multiple Twitch &amp; YouTube Streams at Once</title>
 		<meta
 			name="description"
@@ -22,6 +23,10 @@
 			content="Create a stream wall for Twitch and YouTube. Watch multiple streams in one browser tab."
 		/>
 		<meta property="og:image" content="https://toomanystreams.app/preview.png" />
+		<meta
+			property="og:image:alt"
+			content="TooManyStreams multi-stream viewer showing several live streams in one layout"
+		/>
 		<meta property="og:url" content="https://toomanystreams.app/" />
 		<meta property="og:type" content="website" />
 		<meta property="og:site_name" content="TooManyStreams" />
@@ -38,6 +43,39 @@
 			name="twitter:image"
 			content="https://toomanystreams.app/preview.png"
 		/>
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "FAQPage",
+				"mainEntity": [
+					{
+						"@type": "Question",
+						"name": "Can I watch multiple Twitch streams at once?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Yes. TooManyStreams lets you add multiple Twitch streams to one browser view so you can watch several creators at the same time."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "Can I watch Twitch and YouTube streams together?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Yes. TooManyStreams is designed to help you watch multiple live streams from platforms like Twitch and YouTube in one layout."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "Can I control which stream has audio?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Yes. You can select a main stream so the primary audio comes from the stream you are focused on while the rest stay visible."
+						}
+					}
+				]
+			}
+		</script>
+		<!-- page-head:end -->
 		<link rel="icon" href="/favicon.ico" sizes="any" />
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 		<link rel="icon" href="/favicon.png" type="image/png" sizes="48x48" />
@@ -49,10 +87,19 @@
 		<meta name="theme-color" content="#090f23" />
 		<link rel="preconnect" href="https://player.twitch.tv" />
 		<link rel="preconnect" href="https://www.youtube.com" />
+		<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
 		<link
 			rel="stylesheet"
 			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+			media="print"
+			onload="this.media='all'"
 		/>
+		<noscript>
+			<link
+				rel="stylesheet"
+				href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+			/>
+		</noscript>
 		<script type="application/ld+json">
 			{
 				"@context": "https://schema.org",
@@ -68,8 +115,8 @@
 				}
 			}
 		</script>
-		<script type="module" crossorigin src="/assets/index-CrtMti2i.js"></script>
-		<link rel="stylesheet" crossorigin href="/assets/index-BBxPUAmE.css">
+		<script type="module" crossorigin src="/assets/index-DQct3JIN.js"></script>
+		<link rel="stylesheet" crossorigin href="/assets/index-BAVutZUm.css">
 	</head>
 	<body>
 		<div id="root"></div>

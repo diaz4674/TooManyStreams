@@ -2,14 +2,17 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://toomanystreams.app/</loc>
+    <lastmod>2026-07-04</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://toomanystreams.app/watch-multiple-twitch-streams</loc>
+    <lastmod>2026-07-04</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://toomanystreams.app/multistream-viewer</loc>
+    <lastmod>2026-07-04</lastmod>
     <priority>0.8</priority>
   </url>
 </urlset>

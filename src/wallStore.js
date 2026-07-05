@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { loadProjectFocus, persistProjectFocus } from "./wallPersistence.js"
 
 const DEFAULT_FOCUS_LAYOUT = "single"
-const MAX_FOCUSED_STREAMS = 8
+export const MAX_FOCUSED_STREAMS = 8
 const VALID_FOCUS_LAYOUTS = new Set(["single", "stacked", "equal", "duo"])
 
 function uniqueIds(ids) {

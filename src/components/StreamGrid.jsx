@@ -1559,6 +1559,7 @@ function AutoStreamGrid({
 	streamVolumes,
 	containerSize,
 	maxColumns = 4,
+	forceAllMuted = false,
 	expandedCardChatStreamId = null,
 	primaryFocusedStreamId = null,
 	effectivePrimaryFocusedStreamId = null,
@@ -1658,10 +1659,13 @@ function AutoStreamGrid({
 					// non-preview tile during a discovery preview). Cinema
 					// companions are exempt: they expose their own volume slider,
 					// so hard-muting them would make that control do nothing.
+					// forceAllMuted silences the whole wall (mobile feed behind
+					// the floating mini player).
 					forcedMuted:
-						hasOverlayPresentation &&
-						stream.id !== effectivePrimaryFocusedStreamId &&
-						!isFocusCompanion
+						forceAllMuted ||
+						(hasOverlayPresentation &&
+							stream.id !== effectivePrimaryFocusedStreamId &&
+							!isFocusCompanion)
 							? true
 							: undefined,
 					playbackToken:
@@ -1775,6 +1779,7 @@ export default function StreamGrid({
 	streams,
 	layoutMode = "auto",
 	maxColumns = 4,
+	forceAllMuted = false,
 	previewStream = null,
 	previewStreamAlreadyAdded = false,
 	onAddPreviewStream,
@@ -2345,6 +2350,7 @@ export default function StreamGrid({
 					streamVolumes={streamVolumes}
 					containerSize={containerSize}
 					maxColumns={maxColumns}
+					forceAllMuted={forceAllMuted}
 					expandedCardChatStreamId={expandedCardChatStreamId}
 					primaryFocusedStreamId={primaryFocusedStreamId}
 					effectivePrimaryFocusedStreamId={effectivePrimaryFocusedStreamId}

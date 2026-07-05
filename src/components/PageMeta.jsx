@@ -31,6 +31,7 @@ export default function PageMeta({
 	path = "/",
 	image = getSocialPreviewUrl(),
 	structuredData = null,
+	robots = "index, follow",
 }) {
 	useEffect(() => {
 		const canonicalUrl = getCanonicalUrl(path)
@@ -40,6 +41,10 @@ export default function PageMeta({
 		ensureMeta('meta[name="description"]', {
 			name: "description",
 		}).setAttribute("content", description)
+
+		ensureMeta('meta[name="robots"]', {
+			name: "robots",
+		}).setAttribute("content", robots)
 
 		ensureMeta('meta[property="og:title"]', {
 			property: "og:title",
@@ -65,7 +70,7 @@ export default function PageMeta({
 		}).setAttribute("content", image)
 
 		ensureCanonicalLink().setAttribute("href", canonicalUrl)
-	}, [description, image, path, title])
+	}, [description, image, path, robots, title])
 
 	useEffect(() => {
 		const selector = 'script[data-page-meta-structured-data="true"]'

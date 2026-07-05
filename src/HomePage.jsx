@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useShallow } from "zustand/react/shallow"
 import Header from "./components/Header"
 import StreamGrid from "./components/StreamGrid"
+import MobileHomeView from "./components/mobile/MobileHomeView"
+import { useMobileViewport } from "./useMobileViewport"
 import AddStreamDialog from "./components/AddStreamDialog"
 import EditStreamDialog from "./components/EditStreamDialog"
 import ProjectsDialog from "./components/ProjectsDialog"
@@ -1040,6 +1042,7 @@ export default function HomePage() {
 	const hasStreams = streams.length > 0
 	const layoutMode = activeProject.layoutMode ?? "auto"
 	const isMatrixMode = hasStreams && layoutMode === "matrix"
+	const isMobileViewport = useMobileViewport()
 
 	const handleLayoutModeChange = useCallback(
 		(nextLayoutMode) => {
@@ -1208,6 +1211,32 @@ export default function HomePage() {
 						)}
 					</div>
 				) : hasStreams || searchPreviewStream ? (
+					isMobileViewport ? (
+						<MobileHomeView
+							streams={streams}
+							maxColumns={1}
+							expandedCardChatStreamId={expandedCardChatStreamId}
+							previewStream={searchPreviewStream}
+							previewStreamAlreadyAdded={isPreviewStreamAlreadyAdded}
+							onAddPreviewStream={handleAddPreviewStream}
+							onClosePreview={handleCloseSearchPreview}
+							focusedStreamIds={focusedStreamIds}
+							focusChatStreamId={focusChatStreamId}
+							onVolumeChange={handleStreamVolumeChange}
+							onRemove={removeStream}
+							onEdit={setEditingStreamId}
+							onOpenViews={setViewsDialogStreamId}
+							onSelectView={selectStreamView}
+							onReorder={reorderStreams}
+							onToggleChat={handleToggleCardChat}
+							onEnterFocus={handleEnterFocus}
+							onAddFocusCompanion={handleAddFocusCompanion}
+							onRemoveFocusCompanion={handleRemoveFocusCompanion}
+							onPromoteFocusStream={handlePromoteFocusStream}
+							onSetFocusChatStream={handleSetFocusChatStream}
+							onClearFocus={handleClearFocus}
+						/>
+					) : (
 					<div className="flex min-w-0 items-start gap-4 max-xl:flex-col">
 						<StreamGrid
 							streams={streams}
@@ -1249,6 +1278,7 @@ export default function HomePage() {
 							/>
 						)}
 					</div>
+					)
 				) : (
 					<section className="relative overflow-hidden rounded-[2rem] border border-cyan-400/16 bg-slate-950/42 px-6 py-10 shadow-[0_36px_90px_rgba(8,15,35,0.42)]">
 						<div className="pointer-events-none absolute inset-x-12 top-0 h-52 rounded-[50%] bg-cyan-400/10 blur-3xl" />
