@@ -6,6 +6,7 @@ const useCases = [
 	"Create a stream wall for esports tournaments",
 	"Watch multiple POVs during creator events",
 	"Monitor several creators at the same time",
+	"Multiwatch Twitch and YouTube together, free",
 ]
 
 const faqs = [
@@ -13,6 +14,16 @@ const faqs = [
 		question: "Can I watch multiple Twitch streams at once?",
 		answer:
 			"Yes. TooManyStreams lets you add multiple Twitch streams to one browser view so you can watch several creators at the same time.",
+	},
+	{
+		question: "What is a multiwatch tool?",
+		answer:
+			"A multiwatch tool lets you watch several live streams together in one place instead of switching between tabs. TooManyStreams is a free multiwatch tool for Twitch and YouTube.",
+	},
+	{
+		question: "Is TooManyStreams a MultiTwitch alternative?",
+		answer:
+			"Yes. TooManyStreams is a free, independent alternative to MultiTwitch that also supports YouTube, drag-and-drop layouts, and shareable stream walls. It is not affiliated with multitwitch.tv.",
 	},
 	{
 		question: "Can I watch Twitch and YouTube streams together?",
@@ -71,6 +82,20 @@ export default function HomepageSeoSections() {
 						>
 							<i className="fa-solid fa-layer-group text-cyan-300" />
 							Multistream Viewer
+						</Link>
+						<Link
+							to="/multiwatch"
+							className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-5 py-3 font-bold text-white transition-colors hover:bg-white/12"
+						>
+							<i className="fa-solid fa-table-cells text-cyan-300" />
+							Multiwatch Streams
+						</Link>
+						<Link
+							to="/multitwitch-alternative"
+							className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-5 py-3 font-bold text-white transition-colors hover:bg-white/12"
+						>
+							<i className="fa-brands fa-twitch text-cyan-300" />
+							MultiTwitch Alternative
 						</Link>
 					</div>
 				</div>

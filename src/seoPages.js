@@ -117,4 +117,178 @@ export const seoPages = [
 			],
 		},
 	},
+	{
+		path: "/multiwatch",
+		metaTitle: "Multiwatch - Watch Multiple Twitch & YouTube Streams Free",
+		metaDescription:
+			"Multiwatch multiple Twitch and YouTube streams at once with TooManyStreams, a free multiwatch tool. Build a stream wall, switch audio between streams, and multiwatch live events in one browser tab.",
+		structuredData: [
+			{
+				"@context": "https://schema.org",
+				"@type": "WebPage",
+				name: "Multiwatch - Watch Multiple Twitch & YouTube Streams",
+				url: "https://toomanystreams.app/multiwatch",
+				description:
+					"TooManyStreams is a free multiwatch tool for watching multiple Twitch and YouTube streams at once in one browser tab.",
+			},
+			{
+				"@context": "https://schema.org",
+				"@type": "FAQPage",
+				mainEntity: [
+					{
+						"@type": "Question",
+						name: "What does multiwatch mean?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "Multiwatch means watching multiple live streams at the same time instead of switching between separate tabs or windows. A multiwatch tool arranges several streams in one layout so you can follow all of them together.",
+						},
+					},
+					{
+						"@type": "Question",
+						name: "Is there a free multiwatch app for Twitch and YouTube?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "Yes. TooManyStreams is a free multiwatch app that works with both Twitch and YouTube. Add the channels you want, arrange them into a stream wall, and multiwatch them together in one browser tab.",
+						},
+					},
+					{
+						"@type": "Question",
+						name: "Can I multiwatch and still control which stream has audio?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "Yes. TooManyStreams lets you pick a main stream for audio while you multiwatch the rest, so you can follow commentary or comms without losing sight of the other streams.",
+						},
+					},
+					{
+						"@type": "Question",
+						name: "Do I need to install anything to multiwatch streams?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "No. TooManyStreams runs entirely in your browser, so you can start a multiwatch session immediately without installing an app or browser extension.",
+						},
+					},
+				],
+			},
+		],
+		page: {
+			title: "Multiwatch Multiple Twitch & YouTube Streams at Once",
+			description:
+				"TooManyStreams is a free multiwatch tool that lets you watch multiple Twitch and YouTube streams together in one browser tab. Build a stream wall, control audio, and multiwatch live events without juggling tabs.",
+			sections: [
+				{
+					heading: "What Is Multiwatch?",
+					body: "Multiwatch is the practice of watching several live streams at the same time in one place, instead of flipping between separate browser tabs. A good multiwatch setup keeps every stream visible so you never lose track of what is happening across an event.",
+				},
+				{
+					heading: "TooManyStreams: A Free Multiwatch Tool",
+					body: "TooManyStreams gives you a free way to multiwatch Twitch and YouTube streams together. Add the channels you care about, drop them into a stream wall, and keep everything visible in a single browser tab instead of juggling windows.",
+				},
+				{
+					heading: "Build Your Own Multiwatch Stream Wall",
+					body: "Every multiwatch session is different. TooManyStreams lets you add and remove streams, drag them into the layout you want, and reshape your stream wall as an event evolves, so your multiwatch view always matches what you are following.",
+				},
+				{
+					heading: "Multiwatch Esports, Tournaments, and Creator Events",
+					body: "Multiwatch setups shine during esports tournaments, creator collabs, and community events with several points of view. TooManyStreams keeps casters, players, and official broadcasts together so you can multiwatch the full story as it happens.",
+				},
+				{
+					heading: "Switch Audio Without Breaking Your Multiwatch View",
+					body: "When you multiwatch multiple streams, only one can have your attention at a time. TooManyStreams lets you set a main stream for audio while the rest keep playing silently in view, so you can focus without shrinking your multiwatch layout.",
+				},
+				{
+					heading: "Start Multiwatching for Free",
+					body: "There is nothing to install to multiwatch with TooManyStreams. Open your browser, add your streams, and start multiwatching Twitch and YouTube together in seconds, for free.",
+				},
+			],
+		},
+	},
+	{
+		path: "/multitwitch-alternative",
+		metaTitle: "MultiTwitch Alternative - Watch Multiple Twitch & YouTube Streams",
+		metaDescription:
+			"Looking for a MultiTwitch alternative? TooManyStreams is a free multi-stream viewer for Twitch and YouTube with a draggable stream wall, layout controls, and audio switching in one browser tab.",
+		structuredData: [
+			{
+				"@context": "https://schema.org",
+				"@type": "WebPage",
+				name: "MultiTwitch Alternative for Twitch and YouTube",
+				url: "https://toomanystreams.app/multitwitch-alternative",
+				description:
+					"TooManyStreams is a free, independent alternative to MultiTwitch for watching multiple Twitch and YouTube streams at once.",
+			},
+			{
+				"@context": "https://schema.org",
+				"@type": "FAQPage",
+				mainEntity: [
+					{
+						"@type": "Question",
+						name: "What is MultiTwitch?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "MultiTwitch (multitwitch.tv) is a website that arranges several Twitch streams side by side so you can watch them together instead of switching tabs.",
+						},
+					},
+					{
+						"@type": "Question",
+						name: "Is TooManyStreams affiliated with MultiTwitch?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "No. TooManyStreams is an independent project and is not affiliated with or endorsed by multitwitch.tv. It is built as a free alternative for people who want more layout control and YouTube support.",
+						},
+					},
+					{
+						"@type": "Question",
+						name: "What does TooManyStreams offer that a basic MultiTwitch setup does not?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "TooManyStreams supports both Twitch and YouTube in the same stream wall, lets you drag and drop streams into a custom layout, save and share your setup, and pick which stream has the main audio.",
+						},
+					},
+					{
+						"@type": "Question",
+						name: "Is TooManyStreams free to use?",
+						acceptedAnswer: {
+							"@type": "Answer",
+							text: "Yes. TooManyStreams runs entirely in your browser and is free to use, with no account or installation required to start watching multiple streams.",
+						},
+					},
+				],
+			},
+		],
+		page: {
+			title: "A Free MultiTwitch Alternative for Twitch and YouTube",
+			description:
+				"TooManyStreams is a free, independent alternative to MultiTwitch. Watch multiple Twitch and YouTube streams together, build a custom stream wall, and control audio, all in one browser tab.",
+			sections: [
+				{
+					heading: "What Is MultiTwitch?",
+					body: "MultiTwitch (multitwitch.tv) is a well-known site for watching several Twitch streams side by side in one browser window. It solves a real problem: following multiple creators or POVs without a wall of separate tabs.",
+				},
+				{
+					heading: "TooManyStreams: An Independent MultiTwitch Alternative",
+					body: "TooManyStreams is not affiliated with MultiTwitch. It is a separate, free project built for people who want the same core idea, watching multiple streams at once, with more control over layout, platforms, and audio.",
+				},
+				{
+					heading: "Twitch and YouTube in the Same Stream Wall",
+					body: "Unlike a Twitch-only multi-stream setup, TooManyStreams lets you mix Twitch and YouTube channels in the same view. That matters for events where creators stream on different platforms but you still want everything in one place.",
+				},
+				{
+					heading: "Drag, Drop, and Resize Your Layout",
+					body: "TooManyStreams lets you rearrange your stream wall with drag and drop instead of a fixed grid. Resize, reorder, and rebuild your layout as an event changes, so your view always matches what is happening.",
+				},
+				{
+					heading: "Save and Share Your Stream Wall",
+					body: "Build a layout once and come back to it, or share it with someone else so they see the same streams in the same arrangement. That is useful for recurring watch parties or recommending a setup to friends.",
+				},
+				{
+					heading: "Choose Which Stream Has Audio",
+					body: "With several streams playing at once, TooManyStreams lets you pick one main stream for audio while the rest stay visible, so you always know what is happening even when your attention is on a single feed.",
+				},
+				{
+					heading: "Try a Free MultiTwitch Alternative",
+					body: "If you are searching for a MultiTwitch alternative that also handles YouTube and gives you more layout control, TooManyStreams is free to try with no installation or account required.",
+				},
+			],
+		},
+	},
 ]
